@@ -19,7 +19,6 @@ namespace SCPSL_ModPatch
                     "Try to find game version data in \"global-metadata.dat\".";
         const string GAME_VERSION_IS_NULL = "Can't change the game version because there is no information in the patch info or it was loaded " +
             "with an error.";
-        const string VERSION_RANGE_SELECTION_IS_EMPTY_MESSAGE = "Please select game version in the drop-down list.";
 
         Configuration _config;
         PatchInfo _patchInfo;
@@ -27,7 +26,6 @@ namespace SCPSL_ModPatch
         byte[] _gameAssemblyData = Array.Empty<byte>();
         string GamePath { get => _config.GameFolder_Path; }
         string GameAssemblyPath { get => @$"{GamePath}\GameAssembly.dll"; }
-        string MetadataPath { get => @$"{GamePath}\SCPSL_Data\il2cpp_data\Metadata\global-metadata.dat"; }
 
         Il2cppManager _il2CppManager = new Il2cppManager(Array.Empty<byte>());
         GameVersion? _gameVersion;
@@ -37,6 +35,7 @@ namespace SCPSL_ModPatch
 
         VersionRangeInfo SelectedVersionRange { get => (VersionRangeInfo)versionComboBox.SelectedItem; }
         VersionRangeInfo? _il2cppLoadedVersionRange;
+        string? _il2cppLoadedAssemblyPath;
         VersionRangeInfo Il2cppLoadedVersionRange
         {
             get
@@ -86,6 +85,7 @@ namespace SCPSL_ModPatch
             PatchInfo? patchInfo = JsonConvert.DeserializeObject<PatchInfo>(File.ReadAllText(patchInfoPath));
             if (patchInfo == null)
                 throw new Exception("Couldn't deserialize JSON file.");
+            PatchTargetResolver.Validate(patchInfo);
             return patchInfo;
         }
 
@@ -99,6 +99,7 @@ namespace SCPSL_ModPatch
             patchInfo.versionRanges[0].methods.patchMethods = new PatchMethodInfo[1];
             patchInfo.versionRanges[0].methods.gameVersionMethod = new GameVersionMethodInfo();
             patchInfo.versionRanges[0].methods.patchMethods[0] = new PatchMethodInfo();
+            patchInfo.versionRanges[0].methods.patchMethods[0].patchOffset = 0;
             patchInfo.versionRanges[0].methods.patchMethods[0].patchData = Convert.ToHexString(new byte[] { 0 });
             patchInfo.versionRanges[0].methods.patchMethods[0].patchSize = 0;
             string patchInfoJson = JsonConvert.SerializeObject(patchInfo, Formatting.Indented);
@@ -127,126 +128,57 @@ namespace SCPSL_ModPatch
                 return;
             }
 
-            if (SelectedVersionRange == null)
-            {
-                MessageBox.Show(VERSION_RANGE_SELECTION_IS_EMPTY_MESSAGE, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-
             _isIl2cppLoading = true;
             il2cppButton.Enabled = false;
+            versionComboBox.Enabled = false;
+            openSettingsButton.Enabled = false;
             var initButtonText = il2cppButton.Text;
             il2cppButton.Text = "Loading IL2CPP...";
+            _il2cppLoadedVersionRange = null;
+            _il2cppLoadedAssemblyPath = null;
+            _gameVersion = null;
+            _isGameVersionNotFound = false;
+            ChangeVersionTextBoxLines(1, _defaultGameVersionString);
 
-            // Getting GameAssembly data
             try
             {
-                _gameAssemblyData = await Patcher.GetGameAssemblyDataAsync(GameAssemblyPath);
+                PatchSession session = await PatchSession.LoadAsync(GamePath, _patchInfo,
+                    versionComboBox.SelectedItem as VersionRangeInfo, interactive: true,
+                    createDummyDlls: _config.CreateManagedDummyDllFolder);
+                _gameAssemblyData = session.AssemblyData;
+                _il2CppManager = session.Manager;
+                _il2cppLoadedVersionRange = session.Target;
+                _il2cppLoadedAssemblyPath = GameAssemblyPath;
+                versionComboBox.SelectedItem = session.Target;
+                _gameVersion = session.Target.methods.gameVersionMethod == null ? null : session.DetectedVersion;
+                if (session.DetectedVersion.HasValue)
+                    ChangeVersionTextBoxLines(1, session.DetectedVersion.Value.ToString());
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                goto IL2CPP_LOAD_END;
-            }
-
-            //Loading IL2CPP
-            _il2CppManager = new Il2cppManager(_gameAssemblyData);
-            _il2cppLoadedVersionRange = SelectedVersionRange;
-            ChangeVersionTextBoxLines(1, _defaultGameVersionString);
-            int metadataVersion = _il2cppLoadedVersionRange.metadataVersion;
-            Patcher.FixMetadataVersion(metadataVersion, GamePath);
-            bool il2cppManagerLoadSuccess = await LoadIl2cppManager();
-            if (!il2cppManagerLoadSuccess)
-            {
-                goto IL2CPP_LOAD_END;
-            }
-
-            // Game version getting and displaying
-            _isGameVersionNotFound = false;
-            GameVersionMethodInfo? gameVersionMethod = _il2cppLoadedVersionRange.methods.gameVersionMethod;
-            if (gameVersionMethod == null)
-            {
-                _gameVersion = null;
-                goto IL2CPP_LOAD_END;
-            }
-
-            Patcher patcher = new Patcher(GameAssemblyPath, _gameAssemblyData, _il2CppManager, _il2cppLoadedVersionRange);
-
-            GameVersion gameVersion = new();
-            if (gameVersionMethod.autoFindOffsets)
+            catch (FileIsProtectedException)
             {
                 try
                 {
-                    patcher.AutoFindGameVersionOffsets();
+                    Unpacker unpacker = new Unpacker(_config.Unlicense_Path, GameAssemblyPath);
+                    unpacker.UnpackGameAssembly();
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"An error occured during auto searching the game version.\r\n" +
-                        $"Details: {ex.Message}", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    _gameVersion = null;
-                    goto IL2CPP_LOAD_END;
+                    MessageBox.Show(ex.Message, "IL2CPP load failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
-            }
-            try
-            {
-                gameVersion = patcher.GetGameVersion();
-                ChangeVersionTextBoxLines(1, gameVersion.ToString());
-                _gameVersion = gameVersion;
-            }
-            catch (Exception ex) when (ex is GameVersionNotFoundException)
-            {
-                _isGameVersionNotFound = true;
-                ChangeVersionTextBoxLines(1, "Game version is not found in GameAssembly.dll");
-            }
-
-            IL2CPP_LOAD_END:
-            il2cppButton.Text = initButtonText;
-            il2cppButton.Enabled = true;
-            _isIl2cppLoading = false;
-        }
-
-        /// <summary>
-        /// Loads Il2cppManager properties.
-        /// </summary>
-        /// <param name="metadataVersion">Version of the metadata.</param>
-        /// <returns>Success of the operation.</returns>
-        private async Task<bool> LoadIl2cppManager(double? metadataVersion = null)
-        {
-            try
-            {
-                await _il2CppManager.LoadIl2cppAsync(MetadataPath, metadataVersion);
             }
             catch (Exception ex)
             {
-                if (ex is FileIsProtectedException)
-                {
-                    string unpackerPath = _config.Unlicense_Path;
-                    Unpacker unpacker = new Unpacker(unpackerPath, GameAssemblyPath);
-                    unpacker.UnpackGameAssembly();
-                }
-                else
-                {
-                    MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
-                return false;
+                _isGameVersionNotFound = ex is GameVersionNotFoundException;
+                MessageBox.Show(ex.Message, "IL2CPP load failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-            try
+            finally
             {
-                await _il2CppManager.DumpIl2cppAsync();
-
-                if (_config.CreateManagedDummyDllFolder)
-                    await _il2CppManager.GenerateDummyDllsAsync(GamePath);
+                il2cppButton.Text = initButtonText;
+                il2cppButton.Enabled = true;
+                versionComboBox.Enabled = true;
+                openSettingsButton.Enabled = true;
+                _isIl2cppLoading = false;
             }
-            catch
-            {
-                MessageBox.Show(Il2cppManager.IL2CPP_LOAD_ERROR_MESSAGE, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                _il2CppManager.RemoveDumpFolder();
-                return false;
-            }
-            await _il2CppManager.GetScriptJsonAsync();
-            await _il2CppManager.GetMethodsDictionaryAsync();
-            _il2CppManager.RemoveDumpFolder();
-            return true;
         }
 
         private void ChangeVersionTextBoxLines(int i, string value)
@@ -264,7 +196,7 @@ namespace SCPSL_ModPatch
                 return false;
             }
 
-            if (!_il2CppManager.IsIl2cppLoaded)
+            if (!_il2CppManager.IsIl2cppLoaded || _il2cppLoadedVersionRange == null)
             {
                 MessageBox.Show(IL2CPP_IS_NOT_LOADED_MESSAGE, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return false;
@@ -291,8 +223,17 @@ namespace SCPSL_ModPatch
             }
 
             Patcher patcher = new Patcher(GameAssemblyPath, _gameAssemblyData, _il2CppManager, Il2cppLoadedVersionRange);
-            patcher.PatchGameAssembly();
-            patcher.SaveGameAssembly();
+            try
+            {
+                patcher.PatchGameAssembly();
+                patcher.SaveGameAssembly();
+            }
+            catch (Exception ex)
+            {
+                _il2cppLoadedVersionRange = null;
+                MessageBox.Show(ex.Message, "Patch failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
             //patcher.FixMetadataVersion(GamePath); Disabled because we fix metadata during IL2CPP loading.
             patcher.ReplaceLauncher(GamePath);
 
@@ -329,6 +270,13 @@ namespace SCPSL_ModPatch
                 return;
             }
 
+            if (!_gameVersion.Value.type.HasValue)
+            {
+                MessageBox.Show("This legacy release version is detected from native code and metadata. Changing it is not supported.",
+                    "Version detection is read-only", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
             ChangeVersionForm changeVersionForm;
             try
             {
@@ -346,15 +294,25 @@ namespace SCPSL_ModPatch
                 return;
 
             Patcher patcher = new Patcher(GameAssemblyPath, _gameAssemblyData, _il2CppManager, Il2cppLoadedVersionRange);
-            patcher.ChangeGameVersion(changeVersionForm.version);
+            try
+            {
+                patcher.ChangeGameVersion(changeVersionForm.version);
+                patcher.SaveGameAssembly();
+            }
+            catch (Exception ex)
+            {
+                _il2cppLoadedVersionRange = null;
+                MessageBox.Show(ex.Message, "Version change failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
             _gameVersion = changeVersionForm.version;
             ChangeVersionTextBoxLines(1, _gameVersion.Value.ToString());
-            patcher.SaveGameAssembly();
         }
 
         private bool IsIl2cppLoadedForSelectedVersionRange()
         {
-            if (Il2cppLoadedVersionRange == SelectedVersionRange)
+            if (_il2cppLoadedVersionRange == SelectedVersionRange &&
+                string.Equals(_il2cppLoadedAssemblyPath, GameAssemblyPath, StringComparison.OrdinalIgnoreCase))
                 return true;
             return false;
         }

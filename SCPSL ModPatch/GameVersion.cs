@@ -11,7 +11,16 @@ namespace SCPSL_ModPatch
         public byte major = 0;
         public byte minor = 0;
         public byte revision = 0;
-        public VersionType type = 0;
+        public VersionType? type = 0;
+
+        // Legacy release identities have no equivalent to the modern version-type byte.
+        public GameVersion(byte major, byte minor, byte revision)
+        {
+            this.major = major;
+            this.minor = minor;
+            this.revision = revision;
+            type = null;
+        }
 
         public GameVersion(byte major, byte minor, byte revision, byte type)
         {

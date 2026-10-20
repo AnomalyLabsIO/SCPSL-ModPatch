@@ -29,9 +29,11 @@
 
   <ItemGroup>
     <Content Include="logo.ico" />
+    <Content Include="..\Shared_Files\patchinfo.json" Link="patchinfo.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Iced" Version="1.21.0" />
     <PackageReference Include="Microsoft.AspNet.WebApi.Client" Version="6.0.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="System.IO.Hashing" Version="9.0.5" />

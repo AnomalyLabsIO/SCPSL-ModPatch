@@ -17,6 +17,12 @@ namespace SCPSL_ModPatch.PatchUtils
         public string versionRange = string.Empty;
         public string versionFrom = string.Empty;
         public string versionTo = string.Empty;
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? version = null;
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? gameAssemblySha256 = null;
 
         public string cleanLauncherPath = string.Empty;
         public string? cleanLauncherUrl = null;
@@ -27,6 +33,10 @@ namespace SCPSL_ModPatch.PatchUtils
         {
             if (!string.IsNullOrEmpty(versionRange))
                 return versionRange;
+            if (gameAssemblySha256 != null)
+                return $"SHA-256: {gameAssemblySha256}";
+            if (version != null)
+                return version;
             if (string.IsNullOrEmpty(versionFrom))
                 return "Undefined version range";
             if (string.IsNullOrEmpty(versionTo))
@@ -44,7 +54,13 @@ namespace SCPSL_ModPatch.PatchUtils
     public class PatchMethodInfo
     {
         public string name = string.Empty;
-        public int patchOffset; // Relative offset from method start.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public int? patchOffset = null; // Offset from the method start. Null means zero for offset patches.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? patchPattern = null; // Unique byte pattern inside the method.
+        public int patternOffset = 0; // Offset from the pattern match. Requires patchPattern.
         public string patchData = string.Empty; // Hex-coded patch data.
         public int? patchSize = null; // Size of patching area.
         public bool nowarning = false; // Don't show a warning if the method doesn't exist.

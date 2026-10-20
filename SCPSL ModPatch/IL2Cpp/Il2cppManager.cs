@@ -1,6 +1,7 @@
 ﻿using Il2CppDumper;
 using Newtonsoft.Json;
 using System.IO.Hashing;
+using System.Security.Cryptography;
 
 namespace SCPSL_ModPatch.IL2Cpp
 {
@@ -10,11 +11,20 @@ namespace SCPSL_ModPatch.IL2Cpp
         public const string IL2CPP_LOAD_ERROR_MESSAGE = "Loading IL2CPP end up failure.\r\n" +
             "Make sure you selected right version of the game.";
 
+        static readonly System.Text.Json.JsonSerializerOptions _scriptJsonOptions = new System.Text.Json.JsonSerializerOptions()
+        {
+            IncludeFields = true,
+        };
+
         Il2Cpp? _il2Cpp;
         Metadata? _metadata;
         byte[] _gameAssemblyData;
         ScriptJson? _scriptJson;
         Dictionary<string, ScriptMethod>? _methodsDictionary;
+        readonly string _dumpDirectory;
+        readonly bool _interactive;
+        public string OriginalAssemblySha256 { get; }
+        internal string SavedAssemblySha256 { get; set; }
         public bool IsIl2cppLoaded { get => _il2Cpp != null; }
         public Il2Cpp IL2CPP
         {
@@ -57,9 +67,13 @@ namespace SCPSL_ModPatch.IL2Cpp
             }
         }
 
-        public Il2cppManager(byte[] gameAssemblyData)
+        public Il2cppManager(byte[] gameAssemblyData, string? dumpDirectory = null, bool interactive = true)
         {
             _gameAssemblyData = gameAssemblyData;
+            _dumpDirectory = Path.GetFullPath(dumpDirectory ?? IL2CPP_FOLDER);
+            _interactive = interactive;
+            OriginalAssemblySha256 = Convert.ToHexString(SHA256.HashData(gameAssemblyData));
+            SavedAssemblySha256 = OriginalAssemblySha256;
         }
 
         private void LoadIl2cpp(byte[] gameAssemblyData, string metadataPath, double? metadataVersion = null)
@@ -84,12 +98,12 @@ namespace SCPSL_ModPatch.IL2Cpp
 
             try
             {
-                Il2CppDumperWorker.Init(gameAssemblyData, metadataPath, il2cppConfig, out _metadata, out _il2Cpp);
+                Il2CppDumperWorker.Init(gameAssemblyData, metadataPath, il2cppConfig, out _metadata, out _il2Cpp, _interactive);
             }
             catch (Exception ex) when (ex is not FileIsProtectedException)
             {
                 _il2Cpp = null;
-                throw new Il2cppInitException(IL2CPP_LOAD_ERROR_MESSAGE);
+                throw new Il2cppInitException($"{IL2CPP_LOAD_ERROR_MESSAGE}{Environment.NewLine}{ex.Message}");
             }
 
             byte[] finalHash = XxHash128.Hash(gameAssemblyData);
@@ -113,10 +127,10 @@ namespace SCPSL_ModPatch.IL2Cpp
 
         public void DumpIl2cpp()
         {
-            if (!Directory.Exists(IL2CPP_FOLDER))
-                Directory.CreateDirectory(IL2CPP_FOLDER);
+            if (!Directory.Exists(_dumpDirectory))
+                Directory.CreateDirectory(_dumpDirectory);
 
-            Il2CppDumperWorker.Dump(Metadata, IL2CPP, @$"{IL2CPP_FOLDER}\");
+            Il2CppDumperWorker.Dump(Metadata, IL2CPP, _dumpDirectory + Path.DirectorySeparatorChar);
             GC.Collect();
             GC.WaitForPendingFinalizers();
         }
@@ -128,7 +142,7 @@ namespace SCPSL_ModPatch.IL2Cpp
 
         public void GetScriptJson()
         {
-            string scriptPath = @$"{IL2CPP_FOLDER}\script.json";
+            string scriptPath = Path.Combine(_dumpDirectory, "script.json");
             if (!File.Exists(scriptPath))
                 throw new Exception("Script file is not found. First dump il2cpp.");
             ScriptJson? scriptJson = JsonConvert.DeserializeObject<ScriptJson>(File.ReadAllText(scriptPath));
@@ -139,13 +153,13 @@ namespace SCPSL_ModPatch.IL2Cpp
 
         public async Task GetScriptJsonAsync()
         {
-            string scriptPath = @$"{IL2CPP_FOLDER}\script.json";
+            string scriptPath = Path.Combine(_dumpDirectory, "script.json");
             if (!File.Exists(scriptPath))
                 throw new Exception("Script file is not found. First dump il2cpp.");
             ScriptJson? scriptJson;
             using (FileStream scriptStream = File.OpenRead(scriptPath))
             {
-                scriptJson = await System.Text.Json.JsonSerializer.DeserializeAsync<ScriptJson>(scriptStream, MainForm.JsonOptions);
+                scriptJson = await System.Text.Json.JsonSerializer.DeserializeAsync<ScriptJson>(scriptStream, _scriptJsonOptions);
             }
             if (scriptJson == null)
                 throw new Exception("Couldn't deserialize JSON file.");
@@ -182,9 +196,9 @@ namespace SCPSL_ModPatch.IL2Cpp
 
         public void RemoveDumpFolder()
         {
-            if (Directory.Exists(IL2CPP_FOLDER))
+            if (Directory.Exists(_dumpDirectory))
             {
-                Directory.Delete(IL2CPP_FOLDER, true);
+                Directory.Delete(_dumpDirectory, true);
             }
         }
     }

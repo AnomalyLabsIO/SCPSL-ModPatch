@@ -11,20 +11,20 @@ namespace SCPSL_ModPatch.IL2Cpp
 {
     public class Il2CppDumperWorker
     {
-        public static void Init(string il2cppPath, string metadataPath, Config config, out Metadata metadata, out Il2Cpp il2Cpp)
+        public static void Init(string il2cppPath, string metadataPath, Config config, out Metadata metadata, out Il2Cpp il2Cpp, bool interactive = true)
         {
             var metadataBytes = File.ReadAllBytes(metadataPath);
             var il2cppBytes = File.ReadAllBytes(il2cppPath);
-            Init(il2cppBytes, metadataBytes, config, out metadata, out il2Cpp);
+            Init(il2cppBytes, metadataBytes, config, out metadata, out il2Cpp, interactive);
         }
 
-        public static void Init(byte[] il2cppBytes, string metadataPath, Config config, out Metadata metadata, out Il2Cpp il2Cpp)
+        public static void Init(byte[] il2cppBytes, string metadataPath, Config config, out Metadata metadata, out Il2Cpp il2Cpp, bool interactive = true)
         {
             var metadataBytes = File.ReadAllBytes(metadataPath);
-            Init(il2cppBytes, metadataBytes, config, out metadata, out il2Cpp);
+            Init(il2cppBytes, metadataBytes, config, out metadata, out il2Cpp, interactive);
         }
 
-        public static void Init(byte[] il2cppBytes, byte[] metadataBytes, Config config, out Metadata metadata, out Il2Cpp il2Cpp)
+        public static void Init(byte[] il2cppBytes, byte[] metadataBytes, Config config, out Metadata metadata, out Il2Cpp il2Cpp, bool interactive = true)
         {
             Console.WriteLine("Initializing metadata...");
             metadata = new Metadata(new MemoryStream(metadataBytes));
@@ -60,6 +60,8 @@ namespace SCPSL_ModPatch.IL2Cpp
                     break;
                 case 0xCAFEBABE: //FAT Mach-O
                 case 0xBEBAFECA:
+                    if (!interactive)
+                        throw new NotSupportedException("A fat Mach-O binary requires interactive platform selection and cannot be loaded headlessly.");
                     var machofat = new MachoFat(new MemoryStream(il2cppBytes));
                     Console.Write("Select Platform: ");
                     for (var i = 0; i < machofat.fats.Length; i++)
@@ -91,6 +93,8 @@ namespace SCPSL_ModPatch.IL2Cpp
             {
                 if (il2Cpp is ElfBase elf)
                 {
+                    if (!interactive)
+                        throw new NotSupportedException("An ELF dump requires an interactive dump address and cannot be loaded headlessly.");
                     Console.WriteLine("Detected this may be a dump file.");
                     Console.WriteLine("Input il2cpp dump address or input 0 to force continue:");
                     var DumpAddr = Convert.ToUInt64(Console.ReadLine(), 16);
@@ -134,6 +138,8 @@ namespace SCPSL_ModPatch.IL2Cpp
             }
             if (!flag)
             {
+                if (!interactive)
+                    throw new InvalidDataException("Automatic IL2CPP registration discovery failed. Manual registration addresses require interactive mode.");
                 Console.WriteLine("ERROR: Can't use auto mode to process file, try manual mode.");
                 Console.Write("Input CodeRegistration: ");
                 var codeRegistration = Convert.ToUInt64(Console.ReadLine(), 16);

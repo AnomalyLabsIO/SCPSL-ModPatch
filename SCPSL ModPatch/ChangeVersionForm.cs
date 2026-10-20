@@ -21,18 +21,18 @@ namespace SCPSL_ModPatch
             versionTypeBox.Items.AddRange(Enum.GetNames(typeof(GameVersion.VersionType)));
             this.version = version;
             versionTextBox.Text = version.ToString();
-            if ((byte)version.type >= versionTypeBox.Items.Count)
+            if (!version.type.HasValue || (byte)version.type.Value >= versionTypeBox.Items.Count)
             {
                 throw new ArgumentException("Invalid version type. Probably game version was not loaded properly.");
             }
-            versionTypeBox.SelectedIndex = (byte)version.type;
+            versionTypeBox.SelectedIndex = (byte)version.type.Value;
         }
 
         private void changeButton_Click(object sender, EventArgs e)
         {
             try
             {
-                version = new GameVersion(versionTextBox.Text, version.type);
+                version = new GameVersion(versionTextBox.Text, version.type!.Value);
             }
             catch (Exception ex)
             {

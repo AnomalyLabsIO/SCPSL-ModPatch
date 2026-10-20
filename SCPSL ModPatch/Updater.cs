@@ -12,7 +12,7 @@ namespace SCPSL_ModPatch
 {
     internal class Updater
     {
-        const string PATCHINFO_LINK = "https://raw.githubusercontent.com/hopperlopip/SCPSL-ModPatch/refs/heads/master/Shared_Files/patchinfo.json";
+        const string PATCHINFO_LINK = "https://raw.githubusercontent.com/AnomalyLabsIO/SCPSL-ModPatch/refs/heads/master/Shared_Files/patchinfo.json";
 
         public static void UpdatePatchInfo(string patchInfoPath)
         {
