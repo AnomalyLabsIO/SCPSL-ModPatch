@@ -28,23 +28,6 @@ namespace SCPSL_ModPatch.PatchUtils
         }
 
         /// <summary>
-        /// Gets data of the GameAssembly.
-        /// </summary>
-        /// <param name="gameAssemblyPath">Path to the GameAssembly file.</param>
-        /// <returns></returns>
-        public static byte[] GetGameAssemblyData(string gameAssemblyPath)
-        {
-            if (!File.Exists(gameAssemblyPath))
-            {
-                throw new ArgumentException($"Couldn't find GameAssembly.dll. Please type correct path to your game." +
-                    "\r\nIf you typed game folder correctly and your game doesn't have GameAssembly.dll," +
-                    " probably you're using game version that doesn't need the Mod Patch.");
-            }
-            byte[] gameAssemblyData = File.ReadAllBytes(gameAssemblyPath);
-            return gameAssemblyData;
-        }
-
-        /// <summary>
         /// Asynchronously gets data of the GameAssembly.
         /// </summary>
         /// <param name="gameAssemblyPath">Path to the GameAssembly file.</param>
@@ -70,29 +53,6 @@ namespace SCPSL_ModPatch.PatchUtils
         private static ulong GetRVAOffset(Il2Cpp il2Cpp, ulong addr)
         {
             return il2Cpp.GetRVA(il2Cpp.MapRTVA(addr)) - addr;
-        }
-
-        /// <summary>
-        /// Gets offset from function name.
-        /// </summary>
-        /// <param name="il2Cpp"></param>
-        /// <param name="functionName">Name of the function.</param>
-        /// <param name="scriptJson"></param>
-        /// <returns></returns>
-        [Obsolete]
-        private static int GetOffsetFromFuncName(Il2Cpp il2Cpp, string functionName, ScriptJson scriptJson)
-        {
-            for (int i = 0; i < scriptJson.ScriptMethod.Count; i++)
-            {
-                if (scriptJson.ScriptMethod[i].Name == functionName)
-                {
-                    ScriptMethod method = scriptJson.ScriptMethod[i];
-                    ulong address = method.Address;
-                    ulong offset = GetRawMethodOffset(il2Cpp, address);
-                    return Convert.ToInt32(offset);
-                }
-            }
-            return -1;
         }
 
         /// <summary>
@@ -226,33 +186,6 @@ namespace SCPSL_ModPatch.PatchUtils
         }
 
         /// <summary>
-        /// Fixes version of the metadata.
-        /// </summary>
-        /// <param name="metadataVersion">New metadata version.</param>
-        /// <param name="gamePath">Root game folder.</param>
-        public static void FixMetadataVersion(int metadataVersion, string gamePath)
-        {
-            string metadataPath = @$"{gamePath}\SCPSL_Data\il2cpp_data\Metadata\global-metadata.dat";
-            byte[] metadataData = File.ReadAllBytes(metadataPath);
-            byte[] metadataVersionBytes = BitConverter.GetBytes(metadataVersion);
-            int versionOffset = 4;
-            for (int i = 0; i < metadataVersionBytes.Length; i++)
-            {
-                metadataData[i + versionOffset] = metadataVersionBytes[i];
-            }
-            File.WriteAllBytes(metadataPath, metadataData);
-        }
-
-        /// <summary>
-        /// Fixes version of the metadata.
-        /// </summary>
-        /// <param name="gamePath">Root game folder.</param>
-        public void FixMetadataVersion(string gamePath)
-        {
-            FixMetadataVersion(_versionRangeInfo.metadataVersion, gamePath);
-        }
-
-        /// <summary>
         /// Prepares patch data before patching.
         /// </summary>
         /// <param name="patchData">Raw patch data from user.</param>
@@ -322,13 +255,13 @@ namespace SCPSL_ModPatch.PatchUtils
             {
                 if (patchMethod.patchOffset.HasValue)
                     throw new InvalidDataException("Use either patchPattern or patchOffset, not both.");
-                int distinctAddresses = _il2cppManager.ScriptJson.ScriptMethod
-                    .Where(method => method.Name == patchMethod.name)
-                    .Select(method => method.Address).Distinct().Take(2).Count();
+                if (methodMap == null)
+                    _il2cppManager.RefreshMethodAddresses();
+                int distinctAddresses = _il2cppManager.GetDistinctMethodAddresses(patchMethod.name).Count;
                 if (distinctAddresses != 1)
                     throw new InvalidDataException("The method name resolves to more than one native address.");
                 BytePattern pattern = BytePattern.Parse(patchMethod.patchPattern);
-                methodMap ??= new NativeMethodMap(_gameAssemblyData);
+                methodMap ??= _il2cppManager.GetNativeMethodMap(_gameAssemblyData);
                 methodRange = methodMap.GetMethodRange(functionOffset);
                 NativeMethodRange range = methodRange.Value;
                 int match = pattern.FindUniqueOffset(_gameAssemblyData.AsSpan(range.Offset, range.Length));
@@ -421,6 +354,7 @@ namespace SCPSL_ModPatch.PatchUtils
                     throw new InvalidDataException($"Couldn't prepare patch ({patchMethod.name}): {ex.Message} No patches were applied.", ex);
                 }
             }
+            _il2cppManager.InvalidateNativeMethodMap();
             plan.Apply();
             _patchOutcomes.AddRange(outcomes);
         }
@@ -483,9 +417,10 @@ namespace SCPSL_ModPatch.PatchUtils
             HashSet<ulong> formatTargets = script.ScriptMethod.Where(method => method.Name == "System.String$$Format" &&
                 method.Signature == "System_String_o* System_String__Format (System_String_o* format, System_Object_array* args, const MethodInfo* method);")
                 .Select(method => method.Address).ToHashSet();
-            NativeMethodMap methodMap = new NativeMethodMap(_gameAssemblyData);
+            NativeMethodMap methodMap = _il2cppManager.GetNativeMethodMap(_gameAssemblyData);
             string[] fields = GetLegacyVersionFields(_il2cppManager.Metadata);
 
+            _il2cppManager.RefreshMethodAddresses();
             return LegacyReleaseVersionReader.Read(_gameAssemblyData, labels, strings, formatTargets,
                 name => GetLegacyVersionMethod(name, methodMap), fields);
         }
@@ -545,12 +480,12 @@ namespace SCPSL_ModPatch.PatchUtils
         /// </summary>
         private LegacyReleaseVersionReader.Method GetLegacyVersionMethod(string name, NativeMethodMap methodMap)
         {
-            ulong[] addresses = _il2cppManager.ScriptJson.ScriptMethod.Where(method => method.Name == name)
-                .Select(method => method.Address).Distinct().ToArray();
-            if (addresses.Length != 1)
+            IReadOnlyCollection<ulong> addresses = _il2cppManager.GetDistinctMethodAddresses(name);
+            if (addresses.Count != 1)
                 throw new InvalidDataException($"Legacy version method '{name}' is absent or ambiguous.");
-            int rawOffset = checked((int)GetRawMethodOffset(_il2cppManager.IL2CPP, addresses[0]));
-            return new LegacyReleaseVersionReader.Method(name, addresses[0], methodMap.GetMethodRange(rawOffset));
+            ulong address = addresses.Single();
+            int rawOffset = checked((int)GetRawMethodOffset(_il2cppManager.IL2CPP, address));
+            return new LegacyReleaseVersionReader.Method(name, address, methodMap.GetMethodRange(rawOffset));
         }
 
         /// <summary>
@@ -617,6 +552,7 @@ namespace SCPSL_ModPatch.PatchUtils
             int gameVersionOffset = GetOffsetFromFuncName(gameVersionMethod.name);
             if (gameVersionOffset < 0)
                 throw new GameVersionNotFoundException();
+            _il2cppManager.InvalidateNativeMethodMap();
             _gameAssemblyData[gameVersionOffset + gameVersionMethod.majorOffset] = version.major;
             _gameAssemblyData[gameVersionOffset + gameVersionMethod.minorOffset] = version.minor;
             _gameAssemblyData[gameVersionOffset + gameVersionMethod.revisionOffset] = version.revision;

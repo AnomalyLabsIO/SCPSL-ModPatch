@@ -205,22 +205,30 @@ namespace SCPSL_ModPatch
             return true;
         }
 
-        private void patchButton_Click(object sender, EventArgs e)
+        private bool LoadedGameValidation()
         {
             if (!Il2cppValidation())
-                return;
+                return false;
 
             if (string.IsNullOrEmpty(GamePath))
             {
                 MessageBox.Show(GAME_PATH_IS_EMPTY_MESSAGE, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
+                return false;
             }
 
             if (!IsIl2cppLoadedForSelectedVersionRange())
             {
                 MessageBox.Show(IL2CPP_LOADED_FOR_DIFFERENT_VERSIONS_MESSAGE, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
+                return false;
             }
+
+            return true;
+        }
+
+        private void patchButton_Click(object sender, EventArgs e)
+        {
+            if (!LoadedGameValidation())
+                return;
 
             Patcher patcher = new Patcher(GameAssemblyPath, _gameAssemblyData, _il2CppManager, Il2cppLoadedVersionRange);
             try
@@ -234,7 +242,6 @@ namespace SCPSL_ModPatch
                 MessageBox.Show(ex.Message, "Patch failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
-            //patcher.FixMetadataVersion(GamePath); Disabled because we fix metadata during IL2CPP loading.
             patcher.ReplaceLauncher(GamePath);
 
             GC.Collect();
@@ -243,20 +250,8 @@ namespace SCPSL_ModPatch
 
         private void changeVersionButton_Click(object sender, EventArgs e)
         {
-            if (!Il2cppValidation())
+            if (!LoadedGameValidation())
                 return;
-
-            if (string.IsNullOrEmpty(GamePath))
-            {
-                MessageBox.Show(GAME_PATH_IS_EMPTY_MESSAGE, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-
-            if (!IsIl2cppLoadedForSelectedVersionRange())
-            {
-                MessageBox.Show(IL2CPP_LOADED_FOR_DIFFERENT_VERSIONS_MESSAGE, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
 
             if (_gameVersion == null)
             {

@@ -27,17 +27,5 @@ namespace SCPSL_ModPatch
             }
             catch { return; }
         }
-
-        public static async void UpdatePatchInfoAsync(string patchInfoPath, CancellationToken cancellationToken = default)
-        {
-            HttpClient httpClient = new HttpClient();
-            byte[] patchInfoFromNet;
-            try
-            {
-                patchInfoFromNet = await httpClient.GetByteArrayAsync(PATCHINFO_LINK, cancellationToken);
-                File.WriteAllBytes(patchInfoPath, patchInfoFromNet);
-            }
-            catch { return; }
-        }
     }
 }

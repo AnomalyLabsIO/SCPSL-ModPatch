@@ -39,7 +39,10 @@ namespace SCPSL_ModPatch.PatchUtils
             gamePath = Path.GetFullPath(gamePath);
             string assemblyPath = Path.Combine(gamePath, "GameAssembly.dll");
             byte[] assemblyData = await Patcher.GetGameAssemblyDataAsync(assemblyPath).ConfigureAwait(false);
-            string originalSha256 = PatchTargetResolver.ComputeSha256(assemblyData);
+            string scratchDirectory = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "SCPSL-ModPatch", Guid.NewGuid().ToString("N")));
+            string dumpDirectory = Path.Combine(scratchDirectory, "dump");
+            Il2cppManager manager = new Il2cppManager(assemblyData, dumpDirectory, interactive);
+            string originalSha256 = manager.OriginalAssemblySha256;
             VersionRangeInfo? hashTarget = PatchTargetResolver.ResolveHash(info, originalSha256);
             bootstrap = hashTarget ?? bootstrap ?? ResolveUnityBootstrap(info, ReadUnityVersion(gamePath));
             if (bootstrap == null)
@@ -54,14 +57,12 @@ namespace SCPSL_ModPatch.PatchUtils
             string originalMetadataSha256 = PatchTargetResolver.ComputeSha256(originalMetadata);
             byte[] normalizedMetadata = (byte[])originalMetadata.Clone();
 
-            string scratchDirectory = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "SCPSL-ModPatch", Guid.NewGuid().ToString("N")));
-            string dumpDirectory = Path.Combine(scratchDirectory, "dump");
             string parserMetadataPath = interactive ? metadataPath : Path.Combine(scratchDirectory, "global-metadata.dat");
             Directory.CreateDirectory(scratchDirectory);
             try
             {
-                Il2cppManager manager = await LoadManagerAsync(assemblyData, normalizedMetadata, bootstrap.metadataVersion,
-                    parserMetadataPath, dumpDirectory, gamePath, interactive, createDummyDlls).ConfigureAwait(false);
+                await LoadManagerAsync(manager, normalizedMetadata, bootstrap.metadataVersion,
+                    parserMetadataPath, gamePath, createDummyDlls).ConfigureAwait(false);
                 GameVersion? detectedVersion = ReadGameVersion(assemblyPath, assemblyData, manager, bootstrap, interactive);
                 VersionRangeInfo target = PatchTargetResolver.Resolve(info, originalSha256, GetNumericVersion(detectedVersion));
                 if (!ReferenceEquals(target, bootstrap))
@@ -69,8 +70,8 @@ namespace SCPSL_ModPatch.PatchUtils
                     // Use the selected target's parser and version reader together.
                     if (target.metadataVersion != bootstrap.metadataVersion)
                     {
-                        manager = await LoadManagerAsync(assemblyData, normalizedMetadata, target.metadataVersion,
-                            parserMetadataPath, dumpDirectory, gamePath, interactive, createDummyDlls).ConfigureAwait(false);
+                        await LoadManagerAsync(manager, normalizedMetadata, target.metadataVersion,
+                            parserMetadataPath, gamePath, createDummyDlls).ConfigureAwait(false);
                     }
                     GameVersion? confirmedVersion = ReadGameVersion(assemblyPath, assemblyData, manager, target, interactive);
                     if (detectedVersion.HasValue && confirmedVersion.HasValue && !detectedVersion.Value.Equals(confirmedVersion.Value))
@@ -90,21 +91,18 @@ namespace SCPSL_ModPatch.PatchUtils
             }
         }
 
-        private static async Task<Il2cppManager> LoadManagerAsync(byte[] assemblyData, byte[] normalizedMetadata,
-            int metadataVersion, string parserMetadataPath, string dumpDirectory, string gamePath,
-            bool interactive, bool createDummyDlls)
+        private static async Task LoadManagerAsync(Il2cppManager manager, byte[] normalizedMetadata,
+            int metadataVersion, string parserMetadataPath, string gamePath, bool createDummyDlls)
         {
             BitConverter.GetBytes(metadataVersion).CopyTo(normalizedMetadata, 4);
             await File.WriteAllBytesAsync(parserMetadataPath, normalizedMetadata).ConfigureAwait(false);
-            Il2cppManager manager = new Il2cppManager(assemblyData, dumpDirectory, interactive);
-            await manager.LoadIl2cppAsync(parserMetadataPath).ConfigureAwait(false);
+            await manager.LoadIl2cppAsync(parserMetadataPath, metadataData: normalizedMetadata).ConfigureAwait(false);
             await manager.DumpIl2cppAsync().ConfigureAwait(false);
             if (createDummyDlls)
                 await manager.GenerateDummyDllsAsync(gamePath).ConfigureAwait(false);
             await manager.GetScriptJsonAsync().ConfigureAwait(false);
             await manager.GetMethodsDictionaryAsync().ConfigureAwait(false);
             manager.RemoveDumpFolder();
-            return manager;
         }
 
         private static GameVersion? ReadGameVersion(string assemblyPath, byte[] assemblyData, Il2cppManager manager,

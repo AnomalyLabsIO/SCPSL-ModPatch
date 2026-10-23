@@ -1,5 +1,5 @@
 ﻿using Il2CppDumper;
-using Newtonsoft.Json;
+using SCPSL_ModPatch.PatchUtils;
 using System.IO.Hashing;
 using System.Security.Cryptography;
 
@@ -21,6 +21,9 @@ namespace SCPSL_ModPatch.IL2Cpp
         byte[] _gameAssemblyData;
         ScriptJson? _scriptJson;
         Dictionary<string, ScriptMethod>? _methodsDictionary;
+        Dictionary<string, IReadOnlyCollection<ulong>>? _methodAddresses;
+        NativeMethodMap? _nativeMethodMap;
+        string? _nativeMethodMapSha256;
         readonly string _dumpDirectory;
         readonly bool _interactive;
         public string OriginalAssemblySha256 { get; }
@@ -76,7 +79,7 @@ namespace SCPSL_ModPatch.IL2Cpp
             SavedAssemblySha256 = OriginalAssemblySha256;
         }
 
-        private void LoadIl2cpp(byte[] gameAssemblyData, string metadataPath, double? metadataVersion = null)
+        private void LoadIl2cpp(byte[] gameAssemblyData, string metadataPath, double? metadataVersion = null, byte[]? metadataData = null)
         {
             if (gameAssemblyData == null || gameAssemblyData.Length == 0)
             {
@@ -95,10 +98,20 @@ namespace SCPSL_ModPatch.IL2Cpp
             }
 
             byte[] originalHash = XxHash128.Hash(gameAssemblyData);
+            _il2Cpp = null;
+            _metadata = null;
+            _scriptJson = null;
+            _methodsDictionary = null;
+            _methodAddresses = null;
+            InvalidateNativeMethodMap();
 
             try
             {
-                Il2CppDumperWorker.Init(gameAssemblyData, metadataPath, il2cppConfig, out _metadata, out _il2Cpp, _interactive);
+                if (metadataData == null)
+                    Il2CppDumperWorker.Init(gameAssemblyData, metadataPath, il2cppConfig, out _metadata, out _il2Cpp, _interactive);
+                else
+                    // Keep the parser's writable stream separate from the metadata saved by the session.
+                    Il2CppDumperWorker.Init(gameAssemblyData, (byte[])metadataData.Clone(), il2cppConfig, out _metadata, out _il2Cpp, _interactive);
             }
             catch (Exception ex) when (ex is not FileIsProtectedException)
             {
@@ -115,14 +128,14 @@ namespace SCPSL_ModPatch.IL2Cpp
             }
         }
 
-        public void LoadIl2cpp(string metadataPath, double? metadataVersion = null)
+        public void LoadIl2cpp(string metadataPath, double? metadataVersion = null, byte[]? metadataData = null)
         {
-            LoadIl2cpp(_gameAssemblyData, metadataPath, metadataVersion);
+            LoadIl2cpp(_gameAssemblyData, metadataPath, metadataVersion, metadataData);
         }
 
-        public async Task LoadIl2cppAsync(string metadataPath, double? metadataVersion = null)
+        public async Task LoadIl2cppAsync(string metadataPath, double? metadataVersion = null, byte[]? metadataData = null)
         {
-            await Task.Run(() => LoadIl2cpp(metadataPath, metadataVersion));
+            await Task.Run(() => LoadIl2cpp(metadataPath, metadataVersion, metadataData));
         }
 
         public void DumpIl2cpp()
@@ -140,17 +153,6 @@ namespace SCPSL_ModPatch.IL2Cpp
             await Task.Run(() => DumpIl2cpp());
         }
 
-        public void GetScriptJson()
-        {
-            string scriptPath = Path.Combine(_dumpDirectory, "script.json");
-            if (!File.Exists(scriptPath))
-                throw new Exception("Script file is not found. First dump il2cpp.");
-            ScriptJson? scriptJson = JsonConvert.DeserializeObject<ScriptJson>(File.ReadAllText(scriptPath));
-            if (scriptJson == null)
-                throw new Exception("Couldn't deserialize JSON file.");
-            _scriptJson = scriptJson;
-        }
-
         public async Task GetScriptJsonAsync()
         {
             string scriptPath = Path.Combine(_dumpDirectory, "script.json");
@@ -164,11 +166,14 @@ namespace SCPSL_ModPatch.IL2Cpp
             if (scriptJson == null)
                 throw new Exception("Couldn't deserialize JSON file.");
             _scriptJson = scriptJson;
+            _methodsDictionary = null;
+            _methodAddresses = null;
         }
 
         public void GetMethodsDictionary()
         {
             _methodsDictionary = new Dictionary<string, ScriptMethod>();
+            _methodAddresses = null;
             foreach (ScriptMethod method in ScriptJson.ScriptMethod)
             {
                 string methodName = method.Name;
@@ -176,6 +181,64 @@ namespace SCPSL_ModPatch.IL2Cpp
                     continue;
                 _methodsDictionary.Add(methodName, method);
             }
+        }
+
+        /// <summary>
+        /// Refreshes native addresses before using the exposed script method list.
+        /// </summary>
+        internal void RefreshMethodAddresses()
+        {
+            _methodAddresses = new Dictionary<string, IReadOnlyCollection<ulong>>();
+            foreach (ScriptMethod method in ScriptJson.ScriptMethod)
+                AddMethodAddress(method);
+        }
+
+        private void AddMethodAddress(ScriptMethod method)
+        {
+            if (!_methodAddresses!.TryGetValue(method.Name, out IReadOnlyCollection<ulong>? addresses))
+                _methodAddresses.Add(method.Name, new ulong[] { method.Address });
+            else if (addresses is HashSet<ulong> distinctAddresses)
+                distinctAddresses.Add(method.Address);
+            else if (!addresses.Contains(method.Address))
+                _methodAddresses[method.Name] = new HashSet<ulong>(addresses) { method.Address };
+        }
+
+        /// <summary>
+        /// Gets distinct native addresses without discarding ambiguous method names.
+        /// </summary>
+        internal IReadOnlyCollection<ulong> GetDistinctMethodAddresses(string methodName)
+        {
+            if (_methodAddresses == null)
+                RefreshMethodAddresses();
+            if (_methodAddresses!.TryGetValue(methodName, out IReadOnlyCollection<ulong>? addresses))
+                return addresses;
+            return Array.Empty<ulong>();
+        }
+
+        /// <summary>
+        /// Reuses native ranges only while the supplied image is unchanged.
+        /// </summary>
+        internal NativeMethodMap GetNativeMethodMap(byte[] image)
+        {
+            if (!ReferenceEquals(image, _gameAssemblyData))
+                return new NativeMethodMap(image);
+            string sha256 = PatchTargetResolver.ComputeSha256(image);
+            if (_nativeMethodMap == null || !string.Equals(_nativeMethodMapSha256, sha256, StringComparison.Ordinal))
+            {
+                NativeMethodMap methodMap = new NativeMethodMap(image);
+                _nativeMethodMap = methodMap;
+                _nativeMethodMapSha256 = sha256;
+            }
+            return _nativeMethodMap;
+        }
+
+        /// <summary>
+        /// Discards native ranges before changing the loaded image.
+        /// </summary>
+        internal void InvalidateNativeMethodMap()
+        {
+            _nativeMethodMap = null;
+            _nativeMethodMapSha256 = null;
         }
 
         public async Task GetMethodsDictionaryAsync()
