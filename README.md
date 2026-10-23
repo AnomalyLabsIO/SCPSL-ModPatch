@@ -1,6 +1,20 @@
 # SCPSL-ModPatch
 A program that lets you disable external game anti-cheat and modify the game freely. Note that servers with enabled `online_mode` in the config will not work.
 
+## Supported game versions:
+Patching is tested on all public versions of the game since they moved to IL2CPP in Megapatch 2.
+Various beta branches have been shown to work as well.
+
+- [ ] 15.x.x | Megapatch III
+- [x] 14.x.x | Heavy Duty
+- [x] 13.x.x | Refracted Reality
+- [x] 12.x.x | Mimicry
+- [x] 11.x.x | Parabellum
+- [x] 10.x.x | Scopophobia
+- [x] 9.x.x  | Megapatch II
+- [ ] 8.x.x  | Megapatch I | Mono
+- [ ] 0.x.x - 7.x.x | Open Beta | Mono
+
 ## How to use it:
 All you need is to download the program, open it, type the root game path in the settings, load IL2CPP and then press the "Patch" button.
 
