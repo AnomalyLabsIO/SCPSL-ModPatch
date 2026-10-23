@@ -11,7 +11,7 @@ namespace SCPSL_ModPatch
     {
         public string GameFolder_Path = string.Empty;
         public string Unlicense_Path = @".\unlicense.exe";
-        public bool AutoUpdatePatchInfo = true;
+        public bool AutoUpdatePatchInfo = false;
         public bool CreateManagedDummyDllFolder = false;
         public bool CustomPatchInfoEnable = false;
         public string CustomPatchInfoPath = string.Empty;

@@ -37,6 +37,9 @@ namespace SCPSL_ModPatch.PatchUtils
             bool interactive = true, bool createDummyDlls = false)
         {
             gamePath = Path.GetFullPath(gamePath);
+            info = PatchTargetResolver.ForBackend(info, "il2cpp");
+            if (bootstrap != null && PatchTargetResolver.GetBackend(bootstrap) != "il2cpp")
+                throw new InvalidDataException("The selected profile is not an IL2CPP profile.");
             string assemblyPath = Path.Combine(gamePath, "GameAssembly.dll");
             byte[] assemblyData = await Patcher.GetGameAssemblyDataAsync(assemblyPath).ConfigureAwait(false);
             string scratchDirectory = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "SCPSL-ModPatch", Guid.NewGuid().ToString("N")));
@@ -144,7 +147,7 @@ namespace SCPSL_ModPatch.PatchUtils
             if (string.IsNullOrEmpty(unityVersion))
                 return null;
             // The DLL hash and game version select the final target after parsing.
-            VersionRangeInfo[] candidates = info.versionRanges.Where(target => target.gameAssemblySha256 == null &&
+            VersionRangeInfo[] candidates = info.versionRanges.Where(target => PatchTargetResolver.GetBackend(target) == "il2cpp" && target.gameAssemblySha256 == null &&
                 target.cleanLauncherPath.Replace('\\', '/').Split('/').Contains(unityVersion, StringComparer.Ordinal)).ToArray();
             if (candidates.Length == 0)
                 return null;

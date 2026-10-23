@@ -28,11 +28,14 @@
         /// </summary>
         private void InitializeComponent()
         {
+            components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
             il2cppButton = new Button();
             openSettingsButton = new Button();
             versionGroupBox = new GroupBox();
             versionComboBox = new ComboBox();
+            updatePatchInfoButton = new Button();
+            patchInfoToolTip = new ToolTip(components);
             patchButton = new Button();
             changeVersionButton = new Button();
             versionTextBox = new TextBox();
@@ -69,6 +72,7 @@
             // 
             versionGroupBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             versionGroupBox.Controls.Add(versionComboBox);
+            versionGroupBox.Controls.Add(updatePatchInfoButton);
             versionGroupBox.Location = new Point(10, 55);
             versionGroupBox.Margin = new Padding(3, 2, 3, 2);
             versionGroupBox.Name = "versionGroupBox";
@@ -80,14 +84,28 @@
             // 
             // versionComboBox
             // 
-            versionComboBox.Dock = DockStyle.Top;
+            versionComboBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             versionComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
             versionComboBox.FormattingEnabled = true;
             versionComboBox.Location = new Point(3, 18);
             versionComboBox.Name = "versionComboBox";
-            versionComboBox.Size = new Size(505, 23);
+            versionComboBox.Size = new Size(471, 23);
             versionComboBox.TabIndex = 0;
-            // 
+            //
+            // updatePatchInfoButton
+            //
+            updatePatchInfoButton.AccessibleName = "Download patch info";
+            updatePatchInfoButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            updatePatchInfoButton.Font = new Font("Segoe MDL2 Assets", 10F, FontStyle.Regular, GraphicsUnit.Point);
+            updatePatchInfoButton.Location = new Point(480, 17);
+            updatePatchInfoButton.Name = "updatePatchInfoButton";
+            updatePatchInfoButton.Size = new Size(28, 25);
+            updatePatchInfoButton.TabIndex = 1;
+            updatePatchInfoButton.Text = "\uE896";
+            updatePatchInfoButton.UseVisualStyleBackColor = true;
+            patchInfoToolTip.SetToolTip(updatePatchInfoButton, "Download patch info from GitHub");
+            updatePatchInfoButton.Click += updatePatchInfoButton_Click;
+            //
             // patchButton
             // 
             patchButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
@@ -158,6 +176,7 @@
             Name = "MainForm";
             StartPosition = FormStartPosition.CenterScreen;
             Text = "SCPSL ModPatch";
+            Shown += MainForm_Shown;
             versionGroupBox.ResumeLayout(false);
             versionChangerBox.ResumeLayout(false);
             versionChangerBox.PerformLayout();
@@ -173,5 +192,7 @@
         private TextBox versionTextBox;
         private GroupBox versionChangerBox;
         private ComboBox versionComboBox;
+        private Button updatePatchInfoButton;
+        private ToolTip patchInfoToolTip;
     }
 }

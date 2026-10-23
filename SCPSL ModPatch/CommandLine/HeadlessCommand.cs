@@ -27,6 +27,9 @@ namespace SCPSL_ModPatch.CommandLine
           private parser copy is normalized. The default 'write' saves its header.
         Manifest launcher paths are relative to the manifest; explicit paths are
           relative to the caller's working directory. The result parent must exist.
+        Mono games use the selected managed assembly and a verified original backup;
+          no launcher or IL2CPP metadata is changed. The backend is inferred from
+          IL edits when omitted; older native manifests continue to use IL2CPP.
         Exit codes: 0 success/help, 1 operation failed, 2 invalid command arguments,
           3 JSON result could not be written.
         ";
@@ -141,7 +144,7 @@ namespace SCPSL_ModPatch.CommandLine
             string assemblyPath = Path.Combine(options.GameDirectory, "GameAssembly.dll");
             string metadataPath = Path.Combine(options.GameDirectory, "SCPSL_Data", "il2cpp_data", "Metadata", "global-metadata.dat");
             string launcherDestination = Path.Combine(options.GameDirectory, "SCPSL.exe");
-            foreach (string required in new string[] { assemblyPath, metadataPath, options.PatchInfoPath })
+            foreach (string required in new string[] { options.PatchInfoPath })
             {
                 if (!File.Exists(required))
                     throw new FileNotFoundException($"Required input does not exist: {required}", required);
@@ -167,6 +170,16 @@ namespace SCPSL_ModPatch.CommandLine
             }
             else if (info.versionRanges.Length == 1)
                 bootstrap = info.versionRanges[0];
+
+            if (bootstrap != null && PatchTargetResolver.GetBackend(bootstrap) == "mono" ||
+                MonoPatchSession.IsMonoGame(options.GameDirectory, info))
+            {
+                await ExecuteMonoAsync(options, info, bootstrap, result, originalHashes).ConfigureAwait(false);
+                return;
+            }
+            foreach (string required in new[] { assemblyPath, metadataPath })
+                if (!File.Exists(required))
+                    throw new FileNotFoundException($"Required input does not exist: {required}", required);
 
             string manifestDirectory = Path.GetDirectoryName(options.PatchInfoPath)!;
             foreach (VersionRangeInfo target in info.versionRanges)
@@ -259,6 +272,37 @@ namespace SCPSL_ModPatch.CommandLine
             await File.WriteAllBytesAsync(launcherDestination, launcher);
         }
 
+        private static async Task ExecuteMonoAsync(CliOptions options, PatchInfo info, VersionRangeInfo? bootstrap,
+            HeadlessResult result, Dictionary<string, string?> originalHashes)
+        {
+            if (options.CleanLauncherPath != null)
+                throw new InvalidDataException("Mono patching does not replace a launcher; omit --clean-launcher.");
+            result.Backend = "mono";
+            result.MetadataMode = "preserve";
+            result.Stage = "load";
+            MonoPatchSession session = await MonoPatchSession.LoadAsync(options.GameDirectory, info, bootstrap).ConfigureAwait(false);
+            EnsureDifferentPath(options.ResultPath!, session.AssemblyPath);
+            EnsureDifferentPath(options.ResultPath!, session.BackupPath);
+            result.AssemblyPath = session.AssemblyPath;
+            result.BackupPath = session.BackupPath;
+            result.GameVersion = session.VersionLabel;
+            result.Profile = session.Target.ToString();
+            result.ProfileIndex = Array.IndexOf(info.versionRanges, session.Target);
+            result.UnityVersion = PatchSession.ReadUnityVersion(options.GameDirectory);
+            originalHashes[session.AssemblyPath] = session.OriginalSha256;
+            originalHashes[session.BackupPath] = HashFileIfPresent(session.BackupPath);
+            result.Stage = "patch";
+            byte[] rewritten = session.Prepare();
+            if (PatchTargetResolver.ComputeSha256(rewritten) == session.OriginalSha256)
+                result.BackupPath = null;
+            result.Patches.AddRange(session.PatchOutcomes.Select(patch => patch.Status == "applied"
+                ? patch with { Status = "prepared", Message = "Prepared in memory; not yet saved." } : patch));
+            result.Stage = "save";
+            session.Save(rewritten);
+            result.Patches.Clear();
+            result.Patches.AddRange(session.PatchOutcomes);
+        }
+
         private static string? FindResultPath(string[] args)
         {
             int[] matches = Enumerable.Range(0, args.Length).Where(i => args[i] == "--result").ToArray();
@@ -281,6 +325,7 @@ namespace SCPSL_ModPatch.CommandLine
         {
             string bundledManifest = Path.Combine(AppContext.BaseDirectory, CliOptions.PATCHINFO_FILENAME);
             HashSet<string> manifests = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { bundledManifest };
+            List<string> gameDirectories = new List<string>();
             EnsureDifferentPath(resultPath, bundledManifest);
             for (int i = 0; i + 1 < args.Length; i++)
             {
@@ -293,10 +338,16 @@ namespace SCPSL_ModPatch.CommandLine
                     manifests.Add(Path.GetFullPath(value));
                 if (args[i] == "--game-dir")
                 {
-                    foreach (string relative in new string[] { "GameAssembly.dll", "SCPSL.exe", Path.Combine("SCPSL_Data", "il2cpp_data", "Metadata", "global-metadata.dat") })
+                    gameDirectories.Add(Path.GetFullPath(value));
+                    foreach (string relative in new string[] { "GameAssembly.dll", "SCPSL.exe", MonoPatchSession.DEFAULT_ASSEMBLY_PATH,
+                        MonoPatchSession.ALTERNATE_ASSEMBLY_PATH,
+                        Path.Combine("SCPSL_Data", "il2cpp_data", "Metadata", "global-metadata.dat") })
                     {
                         EnsureDifferentPath(resultPath, Path.Combine(value, relative));
                     }
+                    foreach (string dataFolder in new[] { "SCPSL_Data", "SCPSL_Mono" })
+                        foreach (string scene in new[] { "level0", "level1", "globalgamemanagers.assets" })
+                            EnsureDifferentPath(resultPath, Path.Combine(value, dataFolder, scene));
                 }
             }
             // Protect manifest-supplied launchers even when an earlier argument/input check fails.
@@ -316,6 +367,46 @@ namespace SCPSL_ModPatch.CommandLine
                             if (target.ValueKind == JsonValueKind.Object && target.TryGetProperty("cleanLauncherPath", out JsonElement launcher) &&
                                 launcher.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(launcher.GetString()))
                                 EnsureDifferentPath(resultPath, Path.GetFullPath(launcher.GetString()!, Path.GetDirectoryName(manifest)!));
+                            if (target.ValueKind == JsonValueKind.Object)
+                            {
+                                string[] relatives = target.TryGetProperty("assemblyPath", out JsonElement assembly) &&
+                                    assembly.ValueKind == JsonValueKind.String ? new[] { assembly.GetString()! } :
+                                    new[] { MonoPatchSession.DEFAULT_ASSEMBLY_PATH, MonoPatchSession.ALTERNATE_ASSEMBLY_PATH };
+                                foreach (string relative in relatives)
+                                foreach (string gameDirectory in gameDirectories)
+                                {
+                                    string managedPath = Path.GetFullPath(relative, gameDirectory);
+                                    EnsureDifferentPath(resultPath, managedPath);
+                                    if (target.TryGetProperty("assemblySha256", out JsonElement hash) &&
+                                        hash.ValueKind == JsonValueKind.String && hash.GetString() is string declaredHash &&
+                                        declaredHash.Length == 64 && declaredHash.All(Uri.IsHexDigit))
+                                        EnsureDifferentPath(resultPath, MonoPatchSession.GetBackupPath(managedPath, declaredHash));
+                                    string managedDirectory = Path.GetDirectoryName(managedPath)!;
+                                    string? dataDirectory = Path.GetDirectoryName(managedDirectory);
+                                    if (dataDirectory != null)
+                                        foreach (string scene in new[] { "level0", "level1", "globalgamemanagers.assets" })
+                                            EnsureDifferentPath(resultPath, Path.Combine(dataDirectory, scene));
+                                    if (Directory.Exists(managedDirectory))
+                                    {
+                                        string prefix = Path.GetFileName(managedPath) + ".modpatch.";
+                                        foreach (string backup in Directory.EnumerateFiles(managedDirectory))
+                                        {
+                                            string name = Path.GetFileName(backup);
+                                            string extension = Path.GetExtension(name);
+                                            if (extension.Equals(".dll", StringComparison.OrdinalIgnoreCase) ||
+                                                extension.Equals(".exe", StringComparison.OrdinalIgnoreCase))
+                                                EnsureDifferentPath(resultPath, backup);
+                                            if (name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
+                                                name.EndsWith(".bak", StringComparison.OrdinalIgnoreCase) &&
+                                                name.Length == prefix.Length + 64 + 4 &&
+                                                name.Substring(prefix.Length, 64).All(Uri.IsHexDigit))
+                                                EnsureDifferentPath(resultPath, backup);
+                                        }
+                                    }
+                                    if (File.Exists(managedPath))
+                                        EnsureDifferentPath(resultPath, MonoPatchSession.GetBackupPath(managedPath, HashFileIfPresent(managedPath)!));
+                                }
+                            }
                         }
                     }
                 }

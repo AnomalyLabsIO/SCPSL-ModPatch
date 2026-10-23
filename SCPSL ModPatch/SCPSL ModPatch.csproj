@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <Version>3.0.0</Version>
     <TargetFramework>net6.0-windows</TargetFramework>
     <RootNamespace>SCPSL_ModPatch</RootNamespace>
     <Nullable>enable</Nullable>
@@ -29,10 +30,11 @@
 
   <ItemGroup>
     <Content Include="logo.ico" />
-    <Content Include="..\Shared_Files\patchinfo.json" Link="patchinfo.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\Shared_Files\patchinfo.json" Link="patchinfo.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="AssetsTools.NET" Version="3.0.4" />
     <PackageReference Include="Iced" Version="1.21.0" />
     <PackageReference Include="Microsoft.AspNet.WebApi.Client" Version="6.0.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
