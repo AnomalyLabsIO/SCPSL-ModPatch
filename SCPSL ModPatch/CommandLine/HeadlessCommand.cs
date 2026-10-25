@@ -13,6 +13,7 @@ namespace SCPSL_ModPatch.CommandLine
           ""SCPSL ModPatch.exe"" patch --game-dir PATH --result PATH
               [--patch-info PATH] [--profile LABEL] [--clean-launcher PATH]
               [--metadata-mode write|preserve]
+              [--bundle-version-mode preserve|correct]
           ""SCPSL ModPatch.exe"" --help [--result PATH]
 
         The GUI build opens its window with no arguments; the console build requires
@@ -25,6 +26,9 @@ namespace SCPSL_ModPatch.CommandLine
         --clean-launcher overrides the selected profile's local launcher path.
         --metadata-mode preserve keeps runtime metadata byte-identical; only a
           private parser copy is normalized. The default 'write' saves its header.
+        --bundle-version-mode correct synchronizes globalgamemanagers' displayed
+          version with the detected numeric IL2CPP game version (10 or later).
+          The default 'preserve' leaves this Unity settings file unchanged.
         Manifest launcher paths are relative to the manifest; explicit paths are
           relative to the caller's working directory. The result parent must exist.
         Mono games use the selected managed assembly and a verified original backup;
@@ -62,6 +66,7 @@ namespace SCPSL_ModPatch.CommandLine
                 resultPath = options.ResultPath;
                 result.Command = options.Help ? "help" : "patch";
                 result.Stage = "preflight";
+                result.BundleVersionMode = options.BundleVersionMode;
                 if (resultPath != null)
                 {
                     try
@@ -144,6 +149,7 @@ namespace SCPSL_ModPatch.CommandLine
             string assemblyPath = Path.Combine(options.GameDirectory, "GameAssembly.dll");
             string metadataPath = Path.Combine(options.GameDirectory, "SCPSL_Data", "il2cpp_data", "Metadata", "global-metadata.dat");
             string launcherDestination = Path.Combine(options.GameDirectory, "SCPSL.exe");
+            string bundleVersionPath = Path.GetFullPath(Path.Combine(options.GameDirectory, UnityBundleVersionCorrection.RelativePath));
             foreach (string required in new string[] { options.PatchInfoPath })
             {
                 if (!File.Exists(required))
@@ -174,6 +180,8 @@ namespace SCPSL_ModPatch.CommandLine
             if (bootstrap != null && PatchTargetResolver.GetBackend(bootstrap) == "mono" ||
                 MonoPatchSession.IsMonoGame(options.GameDirectory, info))
             {
+                if (options.BundleVersionMode == "correct")
+                    throw new InvalidDataException("Bundle-version correction is available only for numeric IL2CPP games; use --bundle-version-mode preserve for Mono.");
                 await ExecuteMonoAsync(options, info, bootstrap, result, originalHashes).ConfigureAwait(false);
                 return;
             }
@@ -194,6 +202,11 @@ namespace SCPSL_ModPatch.CommandLine
             {
                 originalHashes[path] = HashFileIfPresent(path);
             }
+            if (options.BundleVersionMode == "correct")
+            {
+                if (!File.Exists(bundleVersionPath)) throw new FileNotFoundException("Bundle-version correction requires globalgamemanagers.", bundleVersionPath);
+                originalHashes[bundleVersionPath] = HashFileIfPresent(bundleVersionPath);
+            }
 
             result.Stage = "load";
             PatchSession session = await PatchSession.LoadAsync(options.GameDirectory, info, bootstrap, interactive: false);
@@ -212,7 +225,7 @@ namespace SCPSL_ModPatch.CommandLine
                 launcherPath = Path.GetFullPath(session.Target.cleanLauncherPath, manifestDirectory);
             else
                 throw new InvalidDataException("The selected profile has no local clean launcher; supply --clean-launcher.");
-            foreach (string path in new string[] { assemblyPath, metadataPath, launcherDestination, options.PatchInfoPath })
+            foreach (string path in new string[] { assemblyPath, metadataPath, launcherDestination, bundleVersionPath, options.PatchInfoPath })
             {
                 if (SamePath(launcherPath, path))
                     throw new InvalidDataException("The clean launcher must be a separate input file.");
@@ -221,6 +234,15 @@ namespace SCPSL_ModPatch.CommandLine
             byte[] launcher = await File.ReadAllBytesAsync(launcherPath);
             if (launcher.Length == 0)
                 throw new InvalidDataException("The clean launcher is empty.");
+
+            UnityBundleVersionCorrection? bundleVersion = null;
+            if (options.BundleVersionMode == "correct")
+            {
+                bundleVersion = UnityBundleVersionCorrection.Prepare(bundleVersionPath,
+                    result.GameVersion ?? throw new InvalidDataException("Bundle-version correction requires a detected numeric game version."));
+                if (bundleVersion.OriginalSha256 != originalHashes[bundleVersionPath])
+                    throw new IOException("globalgamemanagers changed while loading the game.");
+            }
 
             result.Stage = "patch";
             Patcher patcher = new Patcher(assemblyPath, session.AssemblyData, session.Manager, session.Target, interactive: false);
@@ -270,6 +292,11 @@ namespace SCPSL_ModPatch.CommandLine
                 }
             }
             await File.WriteAllBytesAsync(launcherDestination, launcher);
+            if (bundleVersion != null)
+            {
+                bundleVersion.Save();
+                result.BundleVersion = new BundleVersionChange(bundleVersion.Path, bundleVersion.Before, bundleVersion.After, bundleVersion.Status);
+            }
         }
 
         private static async Task ExecuteMonoAsync(CliOptions options, PatchInfo info, VersionRangeInfo? bootstrap,
@@ -341,6 +368,7 @@ namespace SCPSL_ModPatch.CommandLine
                     gameDirectories.Add(Path.GetFullPath(value));
                     foreach (string relative in new string[] { "GameAssembly.dll", "SCPSL.exe", MonoPatchSession.DEFAULT_ASSEMBLY_PATH,
                         MonoPatchSession.ALTERNATE_ASSEMBLY_PATH,
+                        UnityBundleVersionCorrection.RelativePath,
                         Path.Combine("SCPSL_Data", "il2cpp_data", "Metadata", "global-metadata.dat") })
                     {
                         EnsureDifferentPath(resultPath, Path.Combine(value, relative));

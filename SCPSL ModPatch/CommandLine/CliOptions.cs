@@ -10,6 +10,7 @@ namespace SCPSL_ModPatch.CommandLine
         public string? CleanLauncherPath { get; private init; }
         public string? ResultPath { get; private init; }
         public string MetadataMode { get; private init; } = "write";
+        public string BundleVersionMode { get; private init; } = "preserve";
 
         /// <summary>
         /// Gets command options from the supplied arguments.
@@ -25,7 +26,7 @@ namespace SCPSL_ModPatch.CommandLine
             Dictionary<string, string> values = new Dictionary<string, string>(StringComparer.Ordinal);
             HashSet<string> knownOptions = new HashSet<string>(StringComparer.Ordinal)
             {
-                "--game-dir", "--patch-info", "--profile", "--clean-launcher", "--result", "--metadata-mode"
+                "--game-dir", "--patch-info", "--profile", "--clean-launcher", "--result", "--metadata-mode", "--bundle-version-mode"
             };
             for (int i = 1; i < args.Length; i++)
             {
@@ -50,10 +51,14 @@ namespace SCPSL_ModPatch.CommandLine
             string metadataMode = values.GetValueOrDefault("--metadata-mode") ?? "write";
             if (metadataMode is not "write" and not "preserve")
                 throw new CliUsageException("--metadata-mode must be 'write' or 'preserve'.");
+            string bundleVersionMode = values.GetValueOrDefault("--bundle-version-mode") ?? "preserve";
+            if (bundleVersionMode is not "correct" and not "preserve")
+                throw new CliUsageException("--bundle-version-mode must be 'correct' or 'preserve'.");
             return new CliOptions
             {
                 Help = help,
                 MetadataMode = metadataMode,
+                BundleVersionMode = bundleVersionMode,
                 GameDirectory = values.TryGetValue("--game-dir", out string? game) ? Path.GetFullPath(game) : string.Empty,
                 PatchInfoPath = Path.GetFullPath(values.GetValueOrDefault("--patch-info") ?? Path.Combine(AppContext.BaseDirectory, PATCHINFO_FILENAME)),
                 Profile = values.GetValueOrDefault("--profile"),

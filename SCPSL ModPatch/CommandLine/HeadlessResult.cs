@@ -21,10 +21,14 @@ namespace SCPSL_ModPatch.CommandLine
         public int MetadataVersion { get; set; }
         public string? MetadataMode { get; set; }
         public bool MetadataNormalizedForParser { get; set; }
+        public string? BundleVersionMode { get; set; }
+        public BundleVersionChange? BundleVersion { get; set; }
         public CommandError? Error { get; set; }
         public string? Help { get; set; }
         public List<PatchOutcome> Patches { get; } = new List<PatchOutcome>();
         public List<FileChange> ModifiedFiles { get; } = new List<FileChange>();
         public List<string> Warnings { get; } = new List<string>();
     }
+
+    internal sealed record BundleVersionChange(string Path, string Before, string After, string Status);
 }

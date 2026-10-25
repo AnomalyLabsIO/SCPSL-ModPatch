@@ -35,7 +35,7 @@ namespace SCPSL_ModPatch
         bool _isPatchInfoUpdating = false;
         MonoPatchSession? _monoSession;
 
-        VersionRangeInfo SelectedVersionRange { get => (VersionRangeInfo)versionComboBox.SelectedItem; }
+        VersionRangeInfo SelectedVersionRange { get => (VersionRangeInfo)versionComboBox.SelectedItem!; }
         VersionRangeInfo? _il2cppLoadedVersionRange;
         string? _il2cppLoadedAssemblyPath;
         VersionRangeInfo Il2cppLoadedVersionRange
