@@ -170,8 +170,6 @@ namespace SCPSL_ModPatch.CommandLine
                     throw new InvalidDataException($"Profile '{options.Profile}' must identify exactly one patch-info entry (found {matches.Length}).");
                 bootstrap = matches[0];
             }
-            else if (info.versionRanges.Length == 1)
-                bootstrap = info.versionRanges[0];
 
             result.Backend = "il2cpp";
             foreach (string required in new[] { assemblyPath, metadataPath })

@@ -1,4 +1,5 @@
 ﻿using Il2CppDumper;
+using Iced.Intel;
 using SCPSL_ModPatch.IL2Cpp;
 using System.Security.Cryptography;
 using System.Text;
@@ -439,6 +440,49 @@ namespace SCPSL_ModPatch.PatchUtils
                 .Select(field => metadata.GetStringFromIndex(field.nameIndex)).ToArray();
         }
 
+        /// <summary>
+        /// Qualifies automatic modern detection against instruction-aligned byte stores
+        /// inside the named native method, rather than arbitrary bytes at profile offsets.
+        /// Explicit custom profiles retain their existing raw-offset reader.
+        /// </summary>
+        internal void VerifyGameVersionReader()
+        {
+            GameVersionMethodInfo? reader = _versionRangeInfo.methods.gameVersionMethod;
+            if (reader == null || UsesLegacyVersionReader)
+                return; // The legacy reader already requires bounded native and metadata evidence.
+            IReadOnlyCollection<ulong> addresses = _il2cppManager.GetDistinctMethodAddresses(reader.name);
+            if (addresses.Count != 1)
+                throw new InvalidDataException("The native version method is absent or ambiguous.");
+            int start = checked((int)GetRawMethodOffset(_il2cppManager.IL2CPP, addresses.Single()));
+            NativeMethodRange range = _il2cppManager.GetNativeMethodMap(_gameAssemblyData).GetMethodRange(start);
+            ReadOnlySpan<int> offsets = stackalloc int[] { reader.majorOffset, reader.minorOffset, reader.revisionOffset, reader.typeOffset };
+            for (int i = 0; i < offsets.Length; i++)
+                if (offsets[i] < 0 || offsets[i] >= range.Length || (i > 0 && offsets[i] <= offsets[i - 1]))
+                    throw new InvalidDataException("Version-reader offsets are outside or out of order within the native method.");
+            var decoder = Iced.Intel.Decoder.Create(64, new ByteArrayCodeReader(_gameAssemblyData, range.Offset, range.Length));
+            int found = 0;
+            while (decoder.IP <= (ulong)offsets[3])
+            {
+                decoder.Decode(out Instruction instruction);
+                if (instruction.IsInvalid)
+                    throw new InvalidDataException("The native version method contains an invalid instruction before its version stores.");
+                for (int i = 0; i < offsets.Length; i++)
+                {
+                    if (instruction.NextIP != (ulong)offsets[i] + 1)
+                        continue;
+                    ulong displacement = instruction.MemoryDisplacement64;
+                    if (instruction.Mnemonic != Mnemonic.Mov || instruction.Op0Kind != OpKind.Memory ||
+                        instruction.MemoryBase != Register.RCX || instruction.MemoryIndex != Register.None ||
+                        instruction.MemorySize != MemorySize.UInt8 || instruction.Op1Kind != OpKind.Immediate8 ||
+                        (i < 3 ? displacement != (ulong)i : displacement is not (3 or 4)))
+                        throw new InvalidDataException("A version-reader offset is not an immediate version-field byte store.");
+                    found |= 1 << i;
+                }
+            }
+            if (found != 15)
+                throw new InvalidDataException("Version-reader offsets do not identify four instruction-aligned native stores.");
+        }
+
         public GameVersion GetGameVersion()
         {
             GameVersionMethodInfo? gameVersionMethod = _versionRangeInfo.methods.gameVersionMethod;
@@ -535,7 +579,7 @@ namespace SCPSL_ModPatch.PatchUtils
             byte[] patternInstruction = new byte[] { 0x48, 0x8B, 0x88, 0xB8, 0x00, 0x00, 0x00 }; // mov rcx, [rax+0B8h]
             long patternOffset = _gameAssemblyData.IndexOf(patternInstruction, gameVersionOffset);
             if (patternOffset == -1)
-                throw new Exception("The pattern for auto game version search wasn't found.");
+                throw new GameVersionNotFoundException("The pattern for auto game version search wasn't found.");
             return patternOffset;
         }
 
@@ -545,7 +589,7 @@ namespace SCPSL_ModPatch.PatchUtils
             int instructionLength = instructionBytes.Length;
             int instructionOffset = checked((int)_gameAssemblyData.IndexOf(instructionBytes, findOffset));
             if (instructionOffset == -1)
-                throw new Exception($"The instruction offset for auto game version search with field offset ({staticFieldOffset}) wasn't found.");
+                throw new GameVersionNotFoundException($"The instruction offset for auto game version search with field offset ({staticFieldOffset}) wasn't found.");
 
             int staticFieldValueOffset = instructionOffset + instructionLength;
 

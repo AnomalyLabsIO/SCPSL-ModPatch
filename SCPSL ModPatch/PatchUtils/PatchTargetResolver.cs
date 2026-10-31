@@ -65,6 +65,14 @@ namespace SCPSL_ModPatch.PatchUtils
         /// </summary>
         public static VersionRangeInfo Resolve(PatchInfo info, string originalSha256, Version? version)
         {
+            return ResolveOrDefault(info, originalSha256, version) ??
+                throw new InvalidDataException(version == null
+                    ? "The game version could not be detected and no DLL hash target matches."
+                    : $"No patch target matches game version {version}.");
+        }
+
+        internal static VersionRangeInfo? ResolveOrDefault(PatchInfo info, string originalSha256, Version? version)
+        {
             VersionRangeInfo? selected = ResolveHash(info, originalSha256);
             if (selected != null)
                 return selected;
@@ -73,12 +81,12 @@ namespace SCPSL_ModPatch.PatchUtils
             if (selected != null)
                 return selected;
             if (version == null)
-                throw new InvalidDataException("The game version could not be detected and no DLL hash target matches.");
+                return null;
 
             selected = GetSingleTarget(info.versionRanges.Where(target => target.version == null && target.gameAssemblySha256 == null &&
                 version >= GetRangeStart(target) &&
                 (IsRangeUnbounded(target.versionTo) || version <= ParseVersion(target.versionTo))), "version range");
-            return selected ?? throw new InvalidDataException($"No patch target matches game version {version}.");
+            return selected;
         }
 
         private static VersionRangeInfo? GetSingleTarget(IEnumerable<VersionRangeInfo> targets, string tier)
