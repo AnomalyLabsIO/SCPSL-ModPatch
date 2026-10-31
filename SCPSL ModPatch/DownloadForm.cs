@@ -9,6 +9,7 @@ namespace SCPSL_ModPatch
         readonly string _url;
         readonly string _fileName;
         readonly string _folderPath;
+        readonly Func<IProgress<int>, CancellationToken, Task>? _downloadAction;
 
         public DownloadForm(string url, string filePath)
         {
@@ -21,9 +22,47 @@ namespace SCPSL_ModPatch
             fileNameTextBox.Text = string.Format(fileNameTextBox.Text, _fileName, url);
         }
 
-        private void DownloadForm_Shown(object? sender, EventArgs e)
+        internal DownloadForm(string url, string filePath, Func<IProgress<int>, CancellationToken, Task> downloadAction)
+            : this(url, filePath)
         {
-            DownloadFile(_url, _fileName, _folderPath);
+            _downloadAction = downloadAction;
+        }
+
+        private async void DownloadForm_Shown(object? sender, EventArgs e)
+        {
+            if (_downloadAction == null)
+            {
+                DownloadFile(_url, _fileName, _folderPath);
+                return;
+            }
+
+            var progress = new Progress<int>(value =>
+            {
+                if (!IsDisposed)
+                    downloadProgressBar.Value = Math.Clamp(value, 0, 100);
+            });
+            while (!DownloadCancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await _downloadAction(progress, DownloadCancellationToken);
+                    if (!IsDisposed && !DownloadCancellationToken.IsCancellationRequested)
+                        DialogResult = DialogResult.OK;
+                    return;
+                }
+                catch (OperationCanceledException) when (DownloadCancellationToken.IsCancellationRequested) { return; }
+                catch (Exception ex)
+                {
+                    if (IsDisposed || DownloadCancellationToken.IsCancellationRequested)
+                        return;
+                    if (MessageBox.Show(this, $"Unlicense could not be downloaded or verified.\r\n\r\n{ex.Message}\r\n\r\n" +
+                        "You can also select a local Unlicense executable in Open settings.", "Download failed",
+                        MessageBoxButtons.RetryCancel, MessageBoxIcon.Error) == DialogResult.Retry)
+                        continue;
+                    DialogResult = DialogResult.Cancel;
+                    return;
+                }
+            }
         }
 
         private async void DownloadFile(string url, string fileName, string folderPath)

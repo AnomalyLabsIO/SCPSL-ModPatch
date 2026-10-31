@@ -121,7 +121,7 @@
             UnlicenseGroupBox.Size = new Size(450, 46);
             UnlicenseGroupBox.TabIndex = 1;
             UnlicenseGroupBox.TabStop = false;
-            UnlicenseGroupBox.Text = "Unlicense executable (only for protected IL2CPP games)";
+            UnlicenseGroupBox.Text = "Unlicense executable (optional; downloaded when needed)";
             // 
             // browseUnlicensePathButton
             // 

@@ -199,7 +199,7 @@ namespace SCPSL_ModPatch
                 try
                 {
                     Unpacker unpacker = new Unpacker(_config.Unlicense_Path, GameAssemblyPath);
-                    unpacker.UnpackGameAssembly();
+                    await unpacker.UnpackGameAssemblyAsync(this);
                 }
                 catch (Exception ex)
                 {

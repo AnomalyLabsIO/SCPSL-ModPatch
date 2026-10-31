@@ -24,6 +24,7 @@ Older versions of the game are built with Mono and can be modified without addit
 3. Open `SCPSL ModPatch.exe`, select **Open settings**, choose the root game folder (containing `SCPSL.exe`), and select **Apply settings**.
 4. Select **Load game**, then **Patch game**, and follow any prompts.
 
+For protected game DLLs, the program will ask to download and run [Unlicense](https://github.com/ergrelet/unlicense).
 ### Command line:
 
 You can also patch a game without opening the graphical interface. Run this from the extracted program folder:

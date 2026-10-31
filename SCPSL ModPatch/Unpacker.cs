@@ -15,21 +15,28 @@ namespace SCPSL_ModPatch
             _gameAssemblyPath = Path.GetFullPath(gameAssemblyPath);
         }
 
-        public void UnpackGameAssembly()
+        public async Task UnpackGameAssemblyAsync(IWin32Window owner)
         {
-            DialogResult userChoice = MessageBox.Show("GameAssembly.dll appears to be protected by Themida and cannot be loaded yet.\r\n\r\n" +
-                "Try unpacking it with Unlicense? This replaces GameAssembly.dll; keep a separate backup first.",
+            var downloader = new UnlicenseDownloader();
+            string? executablePath = downloader.FindExistingExecutable(_unpackerPath);
+            string downloadNotice = executablePath == null
+                ? "Unlicense 0.4.0 (x64, 49 MB) will be downloaded from github.com/ergrelet/unlicense and saved beside ModPatch.\r\n\r\n"
+                : string.Empty;
+            DialogResult userChoice = MessageBox.Show(owner, "GameAssembly.dll appears to be protected by Themida and cannot be loaded yet.\r\n\r\n" +
+                downloadNotice + "Try unpacking it with Unlicense? This replaces GameAssembly.dll; keep a separate backup first.",
                 "Protected game files", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
             if (userChoice == DialogResult.No)
                 return;
-            if (!File.Exists(_unpackerPath))
+            if (executablePath == null)
             {
-                MessageBox.Show("Unlicense was not found. In Open settings, select the Unlicense executable, then press Load game again.",
-                    "Unpacker not found", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
+                using var downloadForm = new DownloadForm(UnlicenseDownloader.Release.DownloadUrl, downloader.ExecutablePath,
+                    async (progress, cancellationToken) => executablePath = await downloader.DownloadAsync(progress, cancellationToken));
+                if (downloadForm.ShowDialog(owner) != DialogResult.OK)
+                    return;
             }
-            string backupPath = UnpackAndReplace();
-            MessageBox.Show($"GameAssembly.dll was unpacked. Press Load game again to continue.\r\n\r\nOriginal DLL backup:\r\n{backupPath}",
+            var unpacker = new Unpacker(executablePath!, _gameAssemblyPath);
+            string backupPath = await Task.Run(() => unpacker.UnpackAndReplace());
+            MessageBox.Show(owner, $"GameAssembly.dll was unpacked. Press Load game again to continue.\r\n\r\nOriginal DLL backup:\r\n{backupPath}",
                 "Unpacking complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
