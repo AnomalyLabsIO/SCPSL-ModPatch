@@ -365,3 +365,6 @@ FodyWeavers.xsd
 
 # Custom directories
 /SCPSL ModPatch/Build_Binaries
+scripts/
+tests/
+tools/
