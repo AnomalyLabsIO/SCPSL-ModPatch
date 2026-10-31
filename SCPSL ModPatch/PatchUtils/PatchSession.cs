@@ -1,5 +1,6 @@
 using SCPSL_ModPatch.IL2Cpp;
 using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
 namespace SCPSL_ModPatch.PatchUtils
@@ -16,6 +17,7 @@ namespace SCPSL_ModPatch.PatchUtils
         public string MetadataPath { get; }
         public string OriginalMetadataSha256 { get; }
         public byte[] NormalizedMetadata { get; }
+        private string _savedMetadataSha256;
 
         private PatchSession(byte[] assemblyData, Il2cppManager manager, VersionRangeInfo target,
             GameVersion? detectedVersion, string metadataPath, string originalMetadataSha256, byte[] normalizedMetadata)
@@ -27,6 +29,7 @@ namespace SCPSL_ModPatch.PatchUtils
             MetadataPath = metadataPath;
             OriginalMetadataSha256 = originalMetadataSha256;
             NormalizedMetadata = normalizedMetadata;
+            _savedMetadataSha256 = originalMetadataSha256;
         }
 
         /// <summary>
@@ -60,7 +63,7 @@ namespace SCPSL_ModPatch.PatchUtils
                 throw new InvalidDataException("The selected SHA-256 target does not match GameAssembly.dll.");
             byte[] normalizedMetadata = (byte[])originalMetadata.Clone();
 
-            string parserMetadataPath = interactive ? metadataPath : Path.Combine(scratchDirectory, "global-metadata.dat");
+            string parserMetadataPath = Path.Combine(scratchDirectory, "global-metadata.dat");
             Directory.CreateDirectory(scratchDirectory);
             try
             {
@@ -102,6 +105,30 @@ namespace SCPSL_ModPatch.PatchUtils
             {
                 if (Directory.Exists(scratchDirectory))
                     Directory.Delete(scratchDirectory, true);
+            }
+        }
+
+        /// <summary>
+        /// Saves an explicitly prepared GUI edit, checking metadata before either file changes.
+        /// Loading alone never writes the original metadata. This is not a multi-file transaction.
+        /// </summary>
+        public void SaveGameAssemblyAndMetadata(Patcher patcher)
+        {
+            string normalizedSha256 = PatchTargetResolver.ComputeSha256(NormalizedMetadata);
+            bool writeMetadata = normalizedSha256 != _savedMetadataSha256;
+            using FileStream metadata = new FileStream(MetadataPath, FileMode.Open,
+                writeMetadata ? FileAccess.ReadWrite : FileAccess.Read, FileShare.None);
+            using SHA256 hash = SHA256.Create();
+            if (Convert.ToHexString(hash.ComputeHash(metadata)) != _savedMetadataSha256)
+                throw new IOException("Metadata changed on disk after loading. Press Load game again before saving.");
+
+            patcher.SaveGameAssembly();
+            if (writeMetadata)
+            {
+                metadata.Position = 4;
+                metadata.Write(NormalizedMetadata, 4, 4);
+                metadata.Flush();
+                _savedMetadataSha256 = normalizedSha256;
             }
         }
 

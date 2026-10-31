@@ -24,6 +24,7 @@ namespace SCPSL_ModPatch
         string GameAssemblyPath { get => @$"{GamePath}\GameAssembly.dll"; }
 
         Il2cppManager _il2CppManager = new Il2cppManager(Array.Empty<byte>());
+        PatchSession? _patchSession;
         GameVersion? _gameVersion;
         readonly string _defaultGameVersionString;
         bool _isIl2cppLoading = false;
@@ -134,6 +135,7 @@ namespace SCPSL_ModPatch
             try
             {
                 _patchInfo = await Updater.UpdatePatchInfoAsync(PATCHINFO_FILENAME);
+                _patchSession = null;
                 _il2cppLoadedVersionRange = null;
                 _il2cppLoadedAssemblyPath = null;
                 _gameVersion = null;
@@ -173,6 +175,7 @@ namespace SCPSL_ModPatch
             il2cppButton.Text = "Loading game...";
             _il2cppLoadedVersionRange = null;
             _il2cppLoadedAssemblyPath = null;
+            _patchSession = null;
             _gameVersion = null;
             ChangeVersionTextBoxLines(1, _defaultGameVersionString);
 
@@ -182,6 +185,7 @@ namespace SCPSL_ModPatch
                     versionComboBox.SelectedItem as VersionRangeInfo, interactive: true,
                     createDummyDlls: _config.CreateManagedDummyDllFolder);
                 _gameAssemblyData = session.AssemblyData;
+                _patchSession = session;
                 _il2CppManager = session.Manager;
                 _il2cppLoadedVersionRange = session.Target;
                 _il2cppLoadedAssemblyPath = GameAssemblyPath;
@@ -229,7 +233,7 @@ namespace SCPSL_ModPatch
                 return false;
             }
 
-            if (!_il2CppManager.IsIl2cppLoaded || _il2cppLoadedVersionRange == null)
+            if (!_il2CppManager.IsIl2cppLoaded || _il2cppLoadedVersionRange == null || _patchSession == null)
             {
                 MessageBox.Show(IL2CPP_IS_NOT_LOADED_MESSAGE, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return false;
@@ -264,12 +268,12 @@ namespace SCPSL_ModPatch
                 return;
 
             Patcher patcher = new Patcher(GameAssemblyPath, _gameAssemblyData, _il2CppManager, Il2cppLoadedVersionRange);
-            bool assemblySaved = false;
+            bool saveStarted = false;
             try
             {
                 patcher.PatchGameAssembly();
-                patcher.SaveGameAssembly();
-                assemblySaved = true;
+                saveStarted = true;
+                _patchSession!.SaveGameAssemblyAndMetadata(patcher);
                 bool launcherReplaced = patcher.ReplaceLauncher(GamePath);
                 MessageBox.Show(launcherReplaced
                     ? "GameAssembly.dll was patched and SCPSL.exe was replaced with the clean launcher.\r\n\r\nNative game files are not backed up automatically."
@@ -279,14 +283,15 @@ namespace SCPSL_ModPatch
             }
             catch (Exception ex)
             {
-                MessageBox.Show((assemblySaved
-                    ? "GameAssembly.dll was patched, but launcher replacement failed. Restore your original files before retrying.\r\n\r\n"
-                    : "Patching failed. Restore your original files before retrying if any game files were changed.\r\n\r\n") + ex.Message,
+                MessageBox.Show((saveStarted
+                    ? "Saving the patch or replacing the launcher failed. Some game files may have changed; restore your original files before retrying.\r\n\r\n"
+                    : "Patch preparation failed. No game files were saved.\r\n\r\n") + ex.Message,
                     "Patch failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
                 _il2cppLoadedVersionRange = null;
+                _patchSession = null;
                 UpdateControls();
             }
         }
@@ -329,11 +334,12 @@ namespace SCPSL_ModPatch
             try
             {
                 patcher.ChangeGameVersion(changeVersionForm.version);
-                patcher.SaveGameAssembly();
+                _patchSession!.SaveGameAssemblyAndMetadata(patcher);
             }
             catch (Exception ex)
             {
                 _il2cppLoadedVersionRange = null;
+                _patchSession = null;
                 MessageBox.Show(ex.Message, "Version change failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 UpdateControls();
                 return;

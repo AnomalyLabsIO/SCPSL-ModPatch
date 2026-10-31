@@ -270,18 +270,9 @@ namespace SCPSL_ModPatch.PatchUtils
                 }
                 if (functionOffset < 0)
                 {
-                    if ((!_interactive || patchMethod.patchPattern != null) && !patchMethod.nowarning)
-                        throw new InvalidDataException($"Couldn't find ({patchMethod.name}); no patches were applied.");
                     if (!patchMethod.nowarning)
-                    {
-                        string mainText = $"Couldn't patch ({patchMethod.name}) function.";
-                        if (string.IsNullOrEmpty(patchMethod.patchifnotexists))
-                            ReportMissingPatch($"{mainText} This function wasn't found.");
-                        else
-                            ReportMissingPatch($"{mainText} This function and ({patchMethod.patchifnotexists}) functions weren't found.");
-                    }
-                    outcomes.Add(new PatchOutcome(patchMethod.name,
-                        patchMethod.nowarning ? "skipped-optional" : "skipped-missing",
+                        throw new InvalidDataException($"Couldn't find ({patchMethod.name}); no patches were applied.");
+                    outcomes.Add(new PatchOutcome(patchMethod.name, "skipped-optional",
                         "The method was not found."));
                     continue;
                 }
@@ -299,15 +290,6 @@ namespace SCPSL_ModPatch.PatchUtils
             _il2cppManager.InvalidateNativeMethodMap();
             plan.Apply();
             _patchOutcomes.AddRange(outcomes);
-        }
-
-        private static void ReportMissingPatch(string message)
-        {
-#if WINDOWS
-            MessageBox.Show(message, "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-#else
-            throw new InvalidDataException(message);
-#endif
         }
 
         /// <summary>
