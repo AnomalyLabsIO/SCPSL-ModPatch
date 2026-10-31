@@ -1,23 +1,10 @@
-﻿using System;
-using System.CodeDom.Compiler;
-using System.Collections.Generic;
-using System.Linq;
+﻿using Il2CppDumper;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
-using Il2CppDumper;
 
 namespace SCPSL_ModPatch.IL2Cpp
 {
     public class Il2CppDumperWorker
     {
-        public static void Init(string il2cppPath, string metadataPath, Config config, out Metadata metadata, out Il2Cpp il2Cpp, bool interactive = true)
-        {
-            var metadataBytes = File.ReadAllBytes(metadataPath);
-            var il2cppBytes = File.ReadAllBytes(il2cppPath);
-            Init(il2cppBytes, metadataBytes, config, out metadata, out il2Cpp, interactive);
-        }
-
         public static void Init(byte[] il2cppBytes, string metadataPath, Config config, out Metadata metadata, out Il2Cpp il2Cpp, bool interactive = true)
         {
             var metadataBytes = File.ReadAllBytes(metadataPath);
@@ -122,10 +109,6 @@ namespace SCPSL_ModPatch.IL2Cpp
                 if (!flag && il2Cpp is PE)
                 {
                     throw new FileIsProtectedException();
-                    /*Console.WriteLine("Use custom PE loader");
-                    il2Cpp = PELoader.Load(il2cppPath);
-                    il2Cpp.SetProperties(version, metadata.metadataUsagesCount);
-                    flag = il2Cpp.PlusSearch(metadata.methodDefs.Count(x => x.methodIndex >= 0), metadata.typeDefs.Length, metadata.imageDefs.Length);*/
                 }
             }
             if (!flag)

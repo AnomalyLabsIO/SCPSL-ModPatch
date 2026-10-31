@@ -52,7 +52,7 @@
             il2cppButton.Name = "il2cppButton";
             il2cppButton.Size = new Size(511, 40);
             il2cppButton.TabIndex = 3;
-            il2cppButton.Text = "Load IL2CPP";
+            il2cppButton.Text = "Load game";
             il2cppButton.UseVisualStyleBackColor = true;
             il2cppButton.Click += il2cppButton_Click;
             // 
@@ -63,7 +63,7 @@
             openSettingsButton.Margin = new Padding(3, 2, 3, 2);
             openSettingsButton.Name = "openSettingsButton";
             openSettingsButton.Size = new Size(511, 40);
-            openSettingsButton.TabIndex = 2;
+            openSettingsButton.TabIndex = 0;
             openSettingsButton.Text = "Open settings";
             openSettingsButton.UseVisualStyleBackColor = true;
             openSettingsButton.Click += openSettingsButton_Click;
@@ -78,9 +78,9 @@
             versionGroupBox.Name = "versionGroupBox";
             versionGroupBox.Padding = new Padding(3, 2, 3, 2);
             versionGroupBox.Size = new Size(511, 47);
-            versionGroupBox.TabIndex = 5;
+            versionGroupBox.TabIndex = 1;
             versionGroupBox.TabStop = false;
-            versionGroupBox.Text = "Game version";
+            versionGroupBox.Text = "Patch profile (auto-selected when possible)";
             // 
             // versionComboBox
             // 
@@ -94,7 +94,7 @@
             //
             // updatePatchInfoButton
             //
-            updatePatchInfoButton.AccessibleName = "Download patch info";
+            updatePatchInfoButton.AccessibleName = "Download patch definitions";
             updatePatchInfoButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             updatePatchInfoButton.Font = new Font("Segoe MDL2 Assets", 10F, FontStyle.Regular, GraphicsUnit.Point);
             updatePatchInfoButton.Location = new Point(480, 17);
@@ -113,8 +113,8 @@
             patchButton.Margin = new Padding(2);
             patchButton.Name = "patchButton";
             patchButton.Size = new Size(511, 40);
-            patchButton.TabIndex = 6;
-            patchButton.Text = "Patch!";
+            patchButton.TabIndex = 4;
+            patchButton.Text = "Patch game";
             patchButton.UseVisualStyleBackColor = true;
             patchButton.Click += patchButton_Click;
             // 
@@ -125,7 +125,7 @@
             changeVersionButton.Margin = new Padding(2);
             changeVersionButton.Name = "changeVersionButton";
             changeVersionButton.Size = new Size(502, 45);
-            changeVersionButton.TabIndex = 8;
+            changeVersionButton.TabIndex = 0;
             changeVersionButton.Text = "Change version";
             changeVersionButton.UseVisualStyleBackColor = true;
             changeVersionButton.Click += changeVersionButton_Click;
@@ -143,7 +143,8 @@
             versionTextBox.ReadOnly = true;
             versionTextBox.Size = new Size(502, 62);
             versionTextBox.TabIndex = 7;
-            versionTextBox.Text = "Game version:\r\nN/A";
+            versionTextBox.TabStop = false;
+            versionTextBox.Text = "Game version:\r\nNot loaded";
             versionTextBox.TextAlign = HorizontalAlignment.Center;
             // 
             // versionChangerBox
@@ -156,9 +157,9 @@
             versionChangerBox.Name = "versionChangerBox";
             versionChangerBox.Padding = new Padding(2);
             versionChangerBox.Size = new Size(511, 140);
-            versionChangerBox.TabIndex = 9;
+            versionChangerBox.TabIndex = 2;
             versionChangerBox.TabStop = false;
-            versionChangerBox.Text = "Version Changer";
+            versionChangerBox.Text = "Detected game version";
             // 
             // MainForm
             // 
@@ -172,7 +173,7 @@
             Controls.Add(openSettingsButton);
             Icon = (Icon)resources.GetObject("$this.Icon");
             Margin = new Padding(3, 2, 3, 2);
-            MinimumSize = new Size(202, 391);
+            MinimumSize = new Size(546, 391);
             Name = "MainForm";
             StartPosition = FormStartPosition.CenterScreen;
             Text = "SCPSL ModPatch";

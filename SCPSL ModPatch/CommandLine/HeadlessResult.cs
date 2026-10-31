@@ -12,9 +12,7 @@ namespace SCPSL_ModPatch.CommandLine
         public DateTimeOffset StartedUtc { get; } = DateTimeOffset.UtcNow;
         public DateTimeOffset CompletedUtc { get; set; }
         public string? GameVersion { get; set; }
-        public string Backend { get; set; } = "il2cpp";
-        public string? AssemblyPath { get; set; }
-        public string? BackupPath { get; set; }
+        public string? Backend { get; set; }
         public string? Profile { get; set; }
         public int ProfileIndex { get; set; } = -1;
         public string? UnityVersion { get; set; }

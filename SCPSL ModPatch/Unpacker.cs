@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Diagnostics;
 
 namespace SCPSL_ModPatch
 {
@@ -20,13 +15,15 @@ namespace SCPSL_ModPatch
 
         public void UnpackGameAssembly()
         {
-            DialogResult userChoice = MessageBox.Show("Looks like GameAssembly.dll is virtualized by protector (most likely Themida).\r\n" +
-                "Do you want to try to unpack GameAssembly.dll by unpacker?", "Question", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            DialogResult userChoice = MessageBox.Show("GameAssembly.dll appears to be protected by Themida and cannot be loaded yet.\r\n\r\n" +
+                "Try unpacking it with Unlicense? This replaces GameAssembly.dll; keep a separate backup first.",
+                "Protected game files", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
             if (userChoice == DialogResult.No)
                 return;
             if (!File.Exists(_unpackerPath))
             {
-                MessageBox.Show("Path is invalid. Please type valid path and try again.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Unlicense was not found. In Open settings, select the Unlicense executable, then press Load game again.",
+                    "Unpacker not found", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
             StartThemidaUnpackerProcess();
@@ -35,14 +32,14 @@ namespace SCPSL_ModPatch
             string unpackedGameAssemblyPath = @$"{unpackerFolder}\unpacked_GameAssembly.dll";
             if (!File.Exists(unpackedGameAssemblyPath))
             {
-                MessageBox.Show("Unpacked file doesn't exist. Try to unpack GameAssembly.dll again.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Unlicense did not produce unpacked_GameAssembly.dll. Check its output before trying again.",
+                    "Unpacking incomplete", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
             File.Delete(_gameAssemblyPath);
             File.Move(unpackedGameAssemblyPath, _gameAssemblyPath);
 
-            MessageBox.Show("Please start IL2CPP load again.", "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
+            MessageBox.Show("GameAssembly.dll was unpacked. Press Load game again to continue.", "Unpacking complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void StartThemidaUnpackerProcess()

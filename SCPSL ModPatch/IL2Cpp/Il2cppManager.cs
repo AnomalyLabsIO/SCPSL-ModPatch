@@ -8,8 +8,8 @@ namespace SCPSL_ModPatch.IL2Cpp
     internal class Il2cppManager
     {
         const string IL2CPP_FOLDER = @".\il2cppdumper";
-        public const string IL2CPP_LOAD_ERROR_MESSAGE = "Loading IL2CPP end up failure.\r\n" +
-            "Make sure you selected right version of the game.";
+        public const string IL2CPP_LOAD_ERROR_MESSAGE = "The IL2CPP game files could not be loaded.\r\n" +
+            "Check the game folder and initial patch profile.";
 
         static readonly System.Text.Json.JsonSerializerOptions _scriptJsonOptions = new System.Text.Json.JsonSerializerOptions()
         {
@@ -57,9 +57,6 @@ namespace SCPSL_ModPatch.IL2Cpp
             }
         }
 
-        /// <summary>
-        /// Keys are methods names.
-        /// </summary>
         public IReadOnlyDictionary<string, ScriptMethod> MethodsDictionary
         {
             get

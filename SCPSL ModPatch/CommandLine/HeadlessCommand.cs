@@ -1,9 +1,10 @@
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 using SCPSL_ModPatch.IL2Cpp;
 using SCPSL_ModPatch.PatchUtils;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
-using System.Text.Json;
 
 namespace SCPSL_ModPatch.CommandLine
 {
@@ -16,8 +17,8 @@ namespace SCPSL_ModPatch.CommandLine
               [--bundle-version-mode preserve|correct]
           ""SCPSL ModPatch.exe"" --help [--result PATH]
 
-        The GUI build opens its window with no arguments; the console build requires
-          a command. Patch mode never prompts, downloads, or unpacks.
+        Open this executable without arguments for the GUI, or supply a command
+          for CLI mode. Patch mode never prompts, downloads, or unpacks.
         --patch-info defaults to patchinfo.json beside the executable.
         --profile selects the initial parser profile by its exact display label;
           omit it when a DLL hash matches, the manifest has one profile, or
@@ -31,22 +32,25 @@ namespace SCPSL_ModPatch.CommandLine
           The default 'preserve' leaves this Unity settings file unchanged.
         Manifest launcher paths are relative to the manifest; explicit paths are
           relative to the caller's working directory. The result parent must exist.
-        Mono games use the selected managed assembly and a verified original backup;
-          no launcher or IL2CPP metadata is changed. The backend is inferred from
-          IL edits when omitted; older native manifests continue to use IL2CPP.
         Exit codes: 0 success/help, 1 operation failed, 2 invalid command arguments,
           3 JSON result could not be written.
         ";
 
-        static readonly JsonSerializerOptions _resultJsonOptions = new JsonSerializerOptions()
+        static readonly JsonSerializerSettings _manifestJsonSettings = new()
         {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = true
+            MissingMemberHandling = MissingMemberHandling.Error,
+            MetadataPropertyHandling = MetadataPropertyHandling.Ignore,
+            TypeNameHandling = TypeNameHandling.None,
+            MaxDepth = 64
         };
 
-        /// <summary>
-        /// Runs a command and writes its JSON result.
-        /// </summary>
+        static readonly JsonSerializerSettings _resultJsonSettings = new()
+        {
+            ContractResolver = new CamelCasePropertyNamesContractResolver(),
+            Formatting = Formatting.Indented,
+            TypeNameHandling = TypeNameHandling.None
+        };
+
         public static int Run(string[] args)
         {
             AttachParentConsole();
@@ -103,7 +107,7 @@ namespace SCPSL_ModPatch.CommandLine
                     result.ExitCode = 1;
                 string message = ex is FileIsProtectedException
                     ? "GameAssembly.dll is protected. Unpack it before running CLI mode; automatic unpacking is unavailable."
-                    : ex.InnerException?.Message ?? ex.Message;
+                    : ex.Message;
                 result.Error = new CommandError(ex.GetType().Name, message);
                 Console.Error.WriteLine($"ModPatch failed ({result.Stage}): {result.Error.Message}");
                 if (result.ExitCode == 2)
@@ -156,15 +160,7 @@ namespace SCPSL_ModPatch.CommandLine
                     throw new FileNotFoundException($"Required input does not exist: {required}", required);
             }
 
-            PatchInfo info = JsonConvert.DeserializeObject<PatchInfo>(await File.ReadAllTextAsync(options.PatchInfoPath),
-                new JsonSerializerSettings
-                {
-                    MissingMemberHandling = MissingMemberHandling.Error,
-                    MetadataPropertyHandling = MetadataPropertyHandling.Ignore,
-                    TypeNameHandling = TypeNameHandling.None,
-                    MaxDepth = 64
-                })
-                ?? throw new InvalidDataException("Patch info is null.");
+            PatchInfo info = DeserializeManifest<PatchInfo>(await File.ReadAllTextAsync(options.PatchInfoPath));
             PatchTargetResolver.Validate(info);
             VersionRangeInfo? bootstrap = null;
             if (options.Profile != null)
@@ -177,14 +173,7 @@ namespace SCPSL_ModPatch.CommandLine
             else if (info.versionRanges.Length == 1)
                 bootstrap = info.versionRanges[0];
 
-            if (bootstrap != null && PatchTargetResolver.GetBackend(bootstrap) == "mono" ||
-                MonoPatchSession.IsMonoGame(options.GameDirectory, info))
-            {
-                if (options.BundleVersionMode == "correct")
-                    throw new InvalidDataException("Bundle-version correction is available only for numeric IL2CPP games; use --bundle-version-mode preserve for Mono.");
-                await ExecuteMonoAsync(options, info, bootstrap, result, originalHashes).ConfigureAwait(false);
-                return;
-            }
+            result.Backend = "il2cpp";
             foreach (string required in new[] { assemblyPath, metadataPath })
                 if (!File.Exists(required))
                     throw new FileNotFoundException($"Required input does not exist: {required}", required);
@@ -198,6 +187,8 @@ namespace SCPSL_ModPatch.CommandLine
 
             if (options.CleanLauncherPath != null && !File.Exists(options.CleanLauncherPath))
                 throw new FileNotFoundException("The local clean launcher does not exist. Downloads are unavailable in CLI mode.", options.CleanLauncherPath);
+            string[] nativeFiles = { assemblyPath, metadataPath, launcherDestination, bundleVersionPath, options.PatchInfoPath, string.Empty };
+            EnsureDistinctNativeFiles(nativeFiles.AsSpan(0, 5));
             foreach (string path in new string[] { assemblyPath, metadataPath, launcherDestination })
             {
                 originalHashes[path] = HashFileIfPresent(path);
@@ -225,11 +216,8 @@ namespace SCPSL_ModPatch.CommandLine
                 launcherPath = Path.GetFullPath(session.Target.cleanLauncherPath, manifestDirectory);
             else
                 throw new InvalidDataException("The selected profile has no local clean launcher; supply --clean-launcher.");
-            foreach (string path in new string[] { assemblyPath, metadataPath, launcherDestination, bundleVersionPath, options.PatchInfoPath })
-            {
-                if (SamePath(launcherPath, path))
-                    throw new InvalidDataException("The clean launcher must be a separate input file.");
-            }
+            nativeFiles[5] = launcherPath;
+            EnsureDistinctNativeFiles(nativeFiles);
             EnsureDifferentPath(options.ResultPath!, launcherPath);
             byte[] launcher = await File.ReadAllBytesAsync(launcherPath);
             if (launcher.Length == 0)
@@ -252,6 +240,7 @@ namespace SCPSL_ModPatch.CommandLine
 
             result.Stage = "save";
             // Preflight every destination before the first game-file write.
+            EnsureDistinctNativeFiles(nativeFiles);
             foreach (KeyValuePair<string, string?> originalHash in originalHashes)
             {
                 string path = originalHash.Key;
@@ -299,37 +288,6 @@ namespace SCPSL_ModPatch.CommandLine
             }
         }
 
-        private static async Task ExecuteMonoAsync(CliOptions options, PatchInfo info, VersionRangeInfo? bootstrap,
-            HeadlessResult result, Dictionary<string, string?> originalHashes)
-        {
-            if (options.CleanLauncherPath != null)
-                throw new InvalidDataException("Mono patching does not replace a launcher; omit --clean-launcher.");
-            result.Backend = "mono";
-            result.MetadataMode = "preserve";
-            result.Stage = "load";
-            MonoPatchSession session = await MonoPatchSession.LoadAsync(options.GameDirectory, info, bootstrap).ConfigureAwait(false);
-            EnsureDifferentPath(options.ResultPath!, session.AssemblyPath);
-            EnsureDifferentPath(options.ResultPath!, session.BackupPath);
-            result.AssemblyPath = session.AssemblyPath;
-            result.BackupPath = session.BackupPath;
-            result.GameVersion = session.VersionLabel;
-            result.Profile = session.Target.ToString();
-            result.ProfileIndex = Array.IndexOf(info.versionRanges, session.Target);
-            result.UnityVersion = PatchSession.ReadUnityVersion(options.GameDirectory);
-            originalHashes[session.AssemblyPath] = session.OriginalSha256;
-            originalHashes[session.BackupPath] = HashFileIfPresent(session.BackupPath);
-            result.Stage = "patch";
-            byte[] rewritten = session.Prepare();
-            if (PatchTargetResolver.ComputeSha256(rewritten) == session.OriginalSha256)
-                result.BackupPath = null;
-            result.Patches.AddRange(session.PatchOutcomes.Select(patch => patch.Status == "applied"
-                ? patch with { Status = "prepared", Message = "Prepared in memory; not yet saved." } : patch));
-            result.Stage = "save";
-            session.Save(rewritten);
-            result.Patches.Clear();
-            result.Patches.AddRange(session.PatchOutcomes);
-        }
-
         private static string? FindResultPath(string[] args)
         {
             int[] matches = Enumerable.Range(0, args.Length).Where(i => args[i] == "--result").ToArray();
@@ -348,11 +306,33 @@ namespace SCPSL_ModPatch.CommandLine
             }
         }
 
+        private static T DeserializeManifest<T>(string json) where T : class
+        {
+            return JsonConvert.DeserializeObject<T>(json, _manifestJsonSettings)
+                ?? throw new InvalidDataException("Patch info is null.");
+        }
+
+        private static IEnumerable<JToken> ManifestValues(JObject value, string name)
+        {
+            // Json.NET binds model members case-insensitively. Inspect every spelling
+            // so duplicate-case properties cannot hide an input on an error path.
+            foreach (JProperty property in value.Properties())
+                if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                    yield return property.Value;
+        }
+
+        private static IEnumerable<string> ManifestStrings(JObject value, string name)
+        {
+            foreach (JToken token in ManifestValues(value, name))
+                if (token.Type is not (JTokenType.Null or JTokenType.Undefined))
+                    yield return token.Value<string>()!;
+        }
+
         private static void EnsureSafeReportPath(string[] args, string resultPath)
         {
             string bundledManifest = Path.Combine(AppContext.BaseDirectory, CliOptions.PATCHINFO_FILENAME);
-            HashSet<string> manifests = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { bundledManifest };
-            List<string> gameDirectories = new List<string>();
+            HashSet<string> manifests = new(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> gameDirectories = new(StringComparer.OrdinalIgnoreCase);
             EnsureDifferentPath(resultPath, bundledManifest);
             for (int i = 0; i + 1 < args.Length; i++)
             {
@@ -365,89 +345,69 @@ namespace SCPSL_ModPatch.CommandLine
                     manifests.Add(Path.GetFullPath(value));
                 if (args[i] == "--game-dir")
                 {
-                    gameDirectories.Add(Path.GetFullPath(value));
-                    foreach (string relative in new string[] { "GameAssembly.dll", "SCPSL.exe", MonoPatchSession.DEFAULT_ASSEMBLY_PATH,
-                        MonoPatchSession.ALTERNATE_ASSEMBLY_PATH,
+                    string gameDirectory = CanonicalPath(value);
+                    if (!gameDirectories.Add(gameDirectory))
+                        continue;
+                    foreach (string relative in new string[] { "GameAssembly.dll", "SCPSL.exe",
                         UnityBundleVersionCorrection.RelativePath,
                         Path.Combine("SCPSL_Data", "il2cpp_data", "Metadata", "global-metadata.dat") })
-                    {
-                        EnsureDifferentPath(resultPath, Path.Combine(value, relative));
-                    }
-                    foreach (string dataFolder in new[] { "SCPSL_Data", "SCPSL_Mono" })
-                        foreach (string scene in new[] { "level0", "level1", "globalgamemanagers.assets" })
-                            EnsureDifferentPath(resultPath, Path.Combine(value, dataFolder, scene));
+                        EnsureDifferentPath(resultPath, Path.Combine(gameDirectory, relative));
                 }
             }
-            // Protect manifest-supplied launchers even when an earlier argument/input check fails.
+            if (manifests.Count == 0)
+                manifests.Add(Path.GetFullPath(bundledManifest));
+
+            // Discovery shares the production parser, but retains raw members so
+            // unknown schema fields cannot prevent protection of recognized inputs.
             foreach (string manifest in manifests)
             {
                 try
                 {
-                    if (!File.Exists(manifest))
-                        continue;
-                    using (JsonDocument document = JsonDocument.Parse(File.ReadAllText(manifest)))
+                    string json;
+                    try
                     {
-                        if (document.RootElement.ValueKind != JsonValueKind.Object ||
-                            !document.RootElement.TryGetProperty("versionRanges", out JsonElement ranges) || ranges.ValueKind != JsonValueKind.Array)
-                            continue;
-                        foreach (JsonElement target in ranges.EnumerateArray())
-                        {
-                            if (target.ValueKind == JsonValueKind.Object && target.TryGetProperty("cleanLauncherPath", out JsonElement launcher) &&
-                                launcher.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(launcher.GetString()))
-                                EnsureDifferentPath(resultPath, Path.GetFullPath(launcher.GetString()!, Path.GetDirectoryName(manifest)!));
-                            if (target.ValueKind == JsonValueKind.Object)
-                            {
-                                string[] relatives = target.TryGetProperty("assemblyPath", out JsonElement assembly) &&
-                                    assembly.ValueKind == JsonValueKind.String ? new[] { assembly.GetString()! } :
-                                    new[] { MonoPatchSession.DEFAULT_ASSEMBLY_PATH, MonoPatchSession.ALTERNATE_ASSEMBLY_PATH };
-                                foreach (string relative in relatives)
-                                foreach (string gameDirectory in gameDirectories)
-                                {
-                                    string managedPath = Path.GetFullPath(relative, gameDirectory);
-                                    EnsureDifferentPath(resultPath, managedPath);
-                                    if (target.TryGetProperty("assemblySha256", out JsonElement hash) &&
-                                        hash.ValueKind == JsonValueKind.String && hash.GetString() is string declaredHash &&
-                                        declaredHash.Length == 64 && declaredHash.All(Uri.IsHexDigit))
-                                        EnsureDifferentPath(resultPath, MonoPatchSession.GetBackupPath(managedPath, declaredHash));
-                                    string managedDirectory = Path.GetDirectoryName(managedPath)!;
-                                    string? dataDirectory = Path.GetDirectoryName(managedDirectory);
-                                    if (dataDirectory != null)
-                                        foreach (string scene in new[] { "level0", "level1", "globalgamemanagers.assets" })
-                                            EnsureDifferentPath(resultPath, Path.Combine(dataDirectory, scene));
-                                    if (Directory.Exists(managedDirectory))
-                                    {
-                                        string prefix = Path.GetFileName(managedPath) + ".modpatch.";
-                                        foreach (string backup in Directory.EnumerateFiles(managedDirectory))
-                                        {
-                                            string name = Path.GetFileName(backup);
-                                            string extension = Path.GetExtension(name);
-                                            if (extension.Equals(".dll", StringComparison.OrdinalIgnoreCase) ||
-                                                extension.Equals(".exe", StringComparison.OrdinalIgnoreCase))
-                                                EnsureDifferentPath(resultPath, backup);
-                                            if (name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
-                                                name.EndsWith(".bak", StringComparison.OrdinalIgnoreCase) &&
-                                                name.Length == prefix.Length + 64 + 4 &&
-                                                name.Substring(prefix.Length, 64).All(Uri.IsHexDigit))
-                                                EnsureDifferentPath(resultPath, backup);
-                                        }
-                                    }
-                                    if (File.Exists(managedPath))
-                                        EnsureDifferentPath(resultPath, MonoPatchSession.GetBackupPath(managedPath, HashFileIfPresent(managedPath)!));
-                                }
-                            }
-                        }
+                        json = File.ReadAllText(manifest);
+                    }
+                    catch (FileNotFoundException)
+                    {
+                        continue;
+                    }
+                    catch (DirectoryNotFoundException)
+                    {
+                        continue;
+                    }
+                    JObject document = DeserializeManifest<JObject>(json);
+                    foreach (JArray ranges in ManifestValues(document, nameof(PatchInfo.versionRanges)).OfType<JArray>())
+                    foreach (JObject target in ranges.OfType<JObject>())
+                    {
+                        foreach (string launcher in ManifestStrings(target, nameof(VersionRangeInfo.cleanLauncherPath)))
+                            if (!string.IsNullOrWhiteSpace(launcher))
+                                EnsureDifferentPath(resultPath, Path.GetFullPath(launcher, Path.GetDirectoryName(manifest)!));
                     }
                 }
-                catch (System.Text.Json.JsonException)
+                catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
                 {
-                    // The manifest loader reports malformed JSON.
+                    throw new UnsafeReportPathException($"Cannot verify --result safety against patch definitions '{manifest}': {ex.Message} No report was written.");
                 }
-                catch (IOException)
-                {
-                }
-                catch (UnauthorizedAccessException)
-                {
-                }
+            }
+        }
+
+        private static void EnsureDistinctNativeFiles(ReadOnlySpan<string> paths)
+        {
+            Dictionary<string, string> resolvedPaths = new(StringComparer.OrdinalIgnoreCase);
+            Dictionary<NativeFileIdentity, string> fileIdentities = new();
+            foreach (string path in paths)
+            {
+                string resolved = CanonicalPath(path);
+                if (resolvedPaths.TryGetValue(resolved, out string? alias))
+                    throw new InvalidDataException($"Native game paths must refer to distinct files: '{alias}' and '{path}'.");
+                resolvedPaths.Add(resolved, path);
+                NativeFileIdentity? identity = NativeFileIdentity.ReadIfPresent(resolved);
+                if (!identity.HasValue)
+                    continue;
+                if (fileIdentities.TryGetValue(identity.Value, out alias))
+                    throw new InvalidDataException($"Native game paths must refer to distinct files: '{alias}' and '{path}'.");
+                fileIdentities.Add(identity.Value, path);
             }
         }
 
@@ -480,7 +440,9 @@ namespace SCPSL_ModPatch.CommandLine
         {
             if (!File.Exists(path))
                 return null;
-            return Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
+            using FileStream file = File.OpenRead(path);
+            using SHA256 hash = SHA256.Create();
+            return Convert.ToHexString(hash.ComputeHash(file));
         }
 
         private static void CheckReportWritable(string path)
@@ -504,7 +466,7 @@ namespace SCPSL_ModPatch.CommandLine
             string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try
             {
-                File.WriteAllText(temporary, System.Text.Json.JsonSerializer.Serialize(result, _resultJsonOptions) + Environment.NewLine);
+                File.WriteAllText(temporary, JsonConvert.SerializeObject(result, _resultJsonSettings) + Environment.NewLine);
                 File.Move(temporary, path, overwrite: true);
             }
             finally

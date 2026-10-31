@@ -57,7 +57,7 @@
             applyButton.Margin = new Padding(3, 2, 3, 2);
             applyButton.Name = "applyButton";
             applyButton.Size = new Size(450, 40);
-            applyButton.TabIndex = 0;
+            applyButton.TabIndex = 5;
             applyButton.Text = "Apply settings";
             applyButton.UseVisualStyleBackColor = true;
             applyButton.Click += applyButton_Click;
@@ -72,9 +72,9 @@
             GamePathGroupBox.Name = "GamePathGroupBox";
             GamePathGroupBox.Padding = new Padding(3, 2, 3, 2);
             GamePathGroupBox.Size = new Size(450, 46);
-            GamePathGroupBox.TabIndex = 2;
+            GamePathGroupBox.TabIndex = 0;
             GamePathGroupBox.TabStop = false;
-            GamePathGroupBox.Text = "Game Path";
+            GamePathGroupBox.Text = "Game folder (contains SCPSL.exe and SCPSL_Data)";
             // 
             // browseGamePathButton
             // 
@@ -95,6 +95,7 @@
             gamePathTextBox.Name = "gamePathTextBox";
             gamePathTextBox.Size = new Size(360, 23);
             gamePathTextBox.TabIndex = 0;
+            gamePathTextBox.PlaceholderText = @"C:\Games\SCPSL";
             // 
             // resetButton
             // 
@@ -103,8 +104,8 @@
             resetButton.Margin = new Padding(3, 2, 3, 2);
             resetButton.Name = "resetButton";
             resetButton.Size = new Size(450, 40);
-            resetButton.TabIndex = 3;
-            resetButton.Text = "Reset settings";
+            resetButton.TabIndex = 6;
+            resetButton.Text = "Reset settings...";
             resetButton.UseVisualStyleBackColor = true;
             resetButton.Click += resetButton_Click;
             // 
@@ -118,9 +119,9 @@
             UnlicenseGroupBox.Name = "UnlicenseGroupBox";
             UnlicenseGroupBox.Padding = new Padding(3, 2, 3, 2);
             UnlicenseGroupBox.Size = new Size(450, 46);
-            UnlicenseGroupBox.TabIndex = 4;
+            UnlicenseGroupBox.TabIndex = 1;
             UnlicenseGroupBox.TabStop = false;
-            UnlicenseGroupBox.Text = "Unlicense Path (Themida unpacker)";
+            UnlicenseGroupBox.Text = "Unlicense executable (only for protected IL2CPP games)";
             // 
             // browseUnlicensePathButton
             // 
@@ -148,8 +149,8 @@
             autoUpdatePatchInfoCheckBox.Location = new Point(12, 112);
             autoUpdatePatchInfoCheckBox.Name = "autoUpdatePatchInfoCheckBox";
             autoUpdatePatchInfoCheckBox.Size = new Size(271, 19);
-            autoUpdatePatchInfoCheckBox.TabIndex = 5;
-            autoUpdatePatchInfoCheckBox.Text = "Automatically update patch info from the web";
+            autoUpdatePatchInfoCheckBox.TabIndex = 2;
+            autoUpdatePatchInfoCheckBox.Text = "Download patch definitions at startup if missing";
             autoUpdatePatchInfoCheckBox.UseVisualStyleBackColor = true;
             // 
             // CustomPatchInfoGroupBox
@@ -161,9 +162,9 @@
             CustomPatchInfoGroupBox.Location = new Point(12, 162);
             CustomPatchInfoGroupBox.Name = "CustomPatchInfoGroupBox";
             CustomPatchInfoGroupBox.Size = new Size(450, 75);
-            CustomPatchInfoGroupBox.TabIndex = 6;
+            CustomPatchInfoGroupBox.TabIndex = 4;
             CustomPatchInfoGroupBox.TabStop = false;
-            CustomPatchInfoGroupBox.Text = "Custom Patch Info";
+            CustomPatchInfoGroupBox.Text = "Custom patch definitions (advanced; restart required)";
             // 
             // browseCustomPatchInfoPathButton
             // 
@@ -182,8 +183,8 @@
             customPatchInfoCheckBox.Location = new Point(6, 22);
             customPatchInfoCheckBox.Name = "customPatchInfoCheckBox";
             customPatchInfoCheckBox.Size = new Size(161, 19);
-            customPatchInfoCheckBox.TabIndex = 1;
-            customPatchInfoCheckBox.Text = "Enable custom patch info";
+            customPatchInfoCheckBox.TabIndex = 0;
+            customPatchInfoCheckBox.Text = "Use a custom patchinfo.json file";
             customPatchInfoCheckBox.UseVisualStyleBackColor = true;
             // 
             // customPatchInfoPathTextBox
@@ -192,7 +193,7 @@
             customPatchInfoPathTextBox.Location = new Point(3, 47);
             customPatchInfoPathTextBox.Name = "customPatchInfoPathTextBox";
             customPatchInfoPathTextBox.Size = new Size(360, 23);
-            customPatchInfoPathTextBox.TabIndex = 0;
+            customPatchInfoPathTextBox.TabIndex = 1;
             // 
             // openJsonFileDialog
             // 
@@ -208,8 +209,8 @@
             createManagedFolderCheckBox.Location = new Point(12, 137);
             createManagedFolderCheckBox.Name = "createManagedFolderCheckBox";
             createManagedFolderCheckBox.Size = new Size(367, 19);
-            createManagedFolderCheckBox.TabIndex = 7;
-            createManagedFolderCheckBox.Text = "Create Managed folder with dummy DLLs during IL2CPP loading";
+            createManagedFolderCheckBox.TabIndex = 3;
+            createManagedFolderCheckBox.Text = "Generate dummy DLLs for IL2CPP inspection (advanced)";
             createManagedFolderCheckBox.UseVisualStyleBackColor = true;
             // 
             // SettingsForm
@@ -225,11 +226,12 @@
             Controls.Add(applyButton);
             Controls.Add(GamePathGroupBox);
             Margin = new Padding(3, 2, 3, 2);
-            MinimumSize = new Size(312, 358);
+            MinimumSize = new Size(490, 386);
             Name = "SettingsForm";
             ShowIcon = false;
             StartPosition = FormStartPosition.CenterParent;
             Text = "Settings";
+            AcceptButton = applyButton;
             GamePathGroupBox.ResumeLayout(false);
             GamePathGroupBox.PerformLayout();
             UnlicenseGroupBox.ResumeLayout(false);

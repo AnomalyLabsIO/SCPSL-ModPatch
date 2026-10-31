@@ -1,16 +1,4 @@
-﻿using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
-
-namespace SCPSL_ModPatch
+﻿namespace SCPSL_ModPatch
 {
     public partial class SettingsForm : Form
     {
@@ -22,7 +10,9 @@ namespace SCPSL_ModPatch
         {
             InitializeComponent();
             _config = GetConfiguration();
-            UpdateSettings();
+            UpdateSettings(_config);
+            customPatchInfoCheckBox.CheckedChanged += (_, _) => UpdatePatchInfoControls();
+            UpdatePatchInfoControls();
         }
 
         public static Configuration GetConfiguration()
@@ -32,67 +22,48 @@ namespace SCPSL_ModPatch
             return Configuration.GetConfiguration(CONFIG_FILENAME);
         }
 
-        public static void SaveConfiguration(Configuration config)
-        {
-            config.SaveConfiguration(CONFIG_FILENAME);
-        }
-
-        private void SaveConfiguration()
-        {
-            SaveConfiguration(_config);
-        }
-
-        private void UpdateSettings()
-        {
-            UpdateSettings(_config);
-        }
-
         private void UpdateSettings(Configuration config)
         {
-            // GameFolder_Path
             gamePathTextBox.Text = config.GameFolder_Path;
 
-            // Unlicense_Path
             unlicenseTextBox.Text = config.Unlicense_Path;
 
-            // AutoUpdatePatchInfo
             autoUpdatePatchInfoCheckBox.Checked = config.AutoUpdatePatchInfo;
 
-            // CreateManagedDummyDllFolder
             createManagedFolderCheckBox.Checked = config.CreateManagedDummyDllFolder;
 
-            // CustomPatchInfoEnable
             customPatchInfoCheckBox.Checked = config.CustomPatchInfoEnable;
 
-            // CustomPatchInfoPath
             customPatchInfoPathTextBox.Text = config.CustomPatchInfoPath;
+        }
+
+        private void UpdatePatchInfoControls()
+        {
+            bool custom = customPatchInfoCheckBox.Checked;
+            customPatchInfoPathTextBox.Enabled = custom;
+            browseCustomPatchInfoPathButton.Enabled = custom;
+            autoUpdatePatchInfoCheckBox.Enabled = !custom;
         }
 
         private void ApplySettings()
         {
-            // GameFolder_Path
             _config.GameFolder_Path = gamePathTextBox.Text;
 
-            // Unlicense_Path
             _config.Unlicense_Path = unlicenseTextBox.Text;
 
-            // AutoUpdatePatchInfo
             _config.AutoUpdatePatchInfo = autoUpdatePatchInfoCheckBox.Checked;
 
-            // CreateManagedDummyDllFolder
             _config.CreateManagedDummyDllFolder = createManagedFolderCheckBox.Checked;
 
-            // CustomPatchInfoEnable
             if (_config.CustomPatchInfoEnable != customPatchInfoCheckBox.Checked)
                 _requireRestart = true;
             _config.CustomPatchInfoEnable = customPatchInfoCheckBox.Checked;
 
-            // CustomPatchInfoPath
             if (_config.CustomPatchInfoPath != customPatchInfoPathTextBox.Text)
                 _requireRestart = true;
             _config.CustomPatchInfoPath = customPatchInfoPathTextBox.Text;
 
-            SaveConfiguration();
+            _config.SaveConfiguration(CONFIG_FILENAME);
 
             if (_requireRestart)
                 ShowRestartWarning();
@@ -106,18 +77,28 @@ namespace SCPSL_ModPatch
 
         private void ShowRestartWarning()
         {
-            MessageBox.Show("To apply some changes, you must restart the program.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show("Restart ModPatch to load the selected patch definitions.", "Restart required", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void applyButton_Click(object sender, EventArgs e)
         {
-            ApplySettings();
-            Close();
+            try
+            {
+                ApplySettings();
+                Close();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Settings could not be saved.\r\n\r\n{ex.Message}", "Settings not saved",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void resetButton_Click(object sender, EventArgs e)
         {
-            ResetSettings();
+            if (MessageBox.Show("Reset all settings, including the game folder and custom patch definitions?",
+                "Reset settings", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) == DialogResult.Yes)
+                ResetSettings();
         }
 
         private void browseGamePathButton_Click(object sender, EventArgs e)

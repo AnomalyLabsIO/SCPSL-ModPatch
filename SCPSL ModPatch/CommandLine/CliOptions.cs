@@ -12,9 +12,6 @@ namespace SCPSL_ModPatch.CommandLine
         public string MetadataMode { get; private init; } = "write";
         public string BundleVersionMode { get; private init; } = "preserve";
 
-        /// <summary>
-        /// Gets command options from the supplied arguments.
-        /// </summary>
         public static CliOptions Parse(string[] args)
         {
             if (args.Length == 2 && args[0] == "patch" && args[1] is "--help" or "-h")

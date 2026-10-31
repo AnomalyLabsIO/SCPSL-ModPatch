@@ -6,9 +6,6 @@ namespace SCPSL_ModPatch
     {
         const string FASM_FILENAME = @".\fasm_binaries\FASM.exe";
 
-        /// <summary>
-        /// Gets the assembler path for the selected mode.
-        /// </summary>
         private static string GetFasmPath(bool interactive)
         {
             if (interactive)

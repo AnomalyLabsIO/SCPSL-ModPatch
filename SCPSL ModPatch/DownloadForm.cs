@@ -1,13 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Linq;
-using System.Net.Http.Handlers;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
+﻿using System.Net.Http.Handlers;
 
 namespace SCPSL_ModPatch
 {
@@ -15,21 +6,9 @@ namespace SCPSL_ModPatch
     {
         CancellationTokenSource _downloadCancellationTokenSource = new();
         CancellationToken DownloadCancellationToken { get => _downloadCancellationTokenSource.Token; }
-        public int ProgressBarPercentage { get => downloadProgressBar.Value; }
         readonly string _url;
         readonly string _fileName;
         readonly string _folderPath;
-
-        public DownloadForm(string url, string fileName, string folderPath)
-        {
-            InitializeComponent();
-            FormClosing += DownloadForm_FormClosing;
-            Shown += DownloadForm_Shown;
-            fileNameTextBox.Text = string.Format(fileNameTextBox.Text, fileName, url);
-            _url = url;
-            _fileName = fileName;
-            _folderPath = folderPath;
-        }
 
         public DownloadForm(string url, string filePath)
         {

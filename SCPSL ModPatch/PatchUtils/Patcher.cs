@@ -1,6 +1,5 @@
 ﻿using Il2CppDumper;
 using SCPSL_ModPatch.IL2Cpp;
-using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -27,41 +26,22 @@ namespace SCPSL_ModPatch.PatchUtils
             _interactive = interactive;
         }
 
-        /// <summary>
-        /// Asynchronously gets data of the GameAssembly.
-        /// </summary>
-        /// <param name="gameAssemblyPath">Path to the GameAssembly file.</param>
-        /// <returns></returns>
         public static async Task<byte[]> GetGameAssemblyDataAsync(string gameAssemblyPath)
         {
             if (!File.Exists(gameAssemblyPath))
             {
-                throw new ArgumentException($"Couldn't find GameAssembly.dll. Please type correct path to your game." +
-                    "\r\nIf you typed game folder correctly and your game doesn't have GameAssembly.dll," +
-                    " probably you're using game version that doesn't need the Mod Patch.");
+                throw new ArgumentException($"GameAssembly.dll was not found in:\r\n{Path.GetDirectoryName(gameAssemblyPath)}\r\n" +
+                    "Choose the IL2CPP game folder containing SCPSL.exe, SCPSL_Data, and GameAssembly.dll.");
             }
             byte[] gameAssemblyData = await File.ReadAllBytesAsync(gameAssemblyPath);
             return gameAssemblyData;
         }
 
-        /// <summary>
-        /// Gets RVA (Relative Virtual Address) offset.
-        /// </summary>
-        /// <param name="il2Cpp"></param>
-        /// <param name="addr">RVA of the function</param>
-        /// <returns></returns>
         private static ulong GetRVAOffset(Il2Cpp il2Cpp, ulong addr)
         {
             return il2Cpp.GetRVA(il2Cpp.MapRTVA(addr)) - addr;
         }
 
-        /// <summary>
-        /// Gets offset from function name.
-        /// </summary>
-        /// <param name="il2Cpp"></param>
-        /// <param name="functionName">Name of the function.</param>
-        /// <param name="methodsDictionary">Dictionary that contains all the methods info.</param>
-        /// <returns></returns>
         private static int GetOffsetFromFuncName(Il2Cpp il2Cpp, string functionName, IReadOnlyDictionary<string, ScriptMethod> methodsDictionary)
         {
             if (methodsDictionary.ContainsKey(functionName))
@@ -74,12 +54,6 @@ namespace SCPSL_ModPatch.PatchUtils
             return -1;
         }
 
-        /// <summary>
-        /// Gets the raw file offset of a method address.
-        /// </summary>
-        /// <param name="il2Cpp">Loaded IL2CPP binary.</param>
-        /// <param name="address">Method address from ScriptJson.</param>
-        /// <returns>Raw file offset.</returns>
         private static ulong GetRawMethodOffset(Il2Cpp il2Cpp, ulong address)
         {
             // ScriptMethod.Address is an RVA for PE images, not a raw file offset.
@@ -93,21 +67,11 @@ namespace SCPSL_ModPatch.PatchUtils
             return address - GetRVAOffset(il2Cpp, address);
         }
 
-        /// <summary>
-        /// Gets offset from function name.
-        /// </summary>
-        /// <param name="functionName">Name of the function.</param>
-        /// <returns></returns>
         private int GetOffsetFromFuncName(string functionName)
         {
             return GetOffsetFromFuncName(_il2cppManager.IL2CPP, functionName, _il2cppManager.MethodsDictionary);
         }
 
-        /// <summary>
-        /// Replaces native launcher with the clean one.
-        /// </summary>
-        /// <param name="gamePath">Root game folder.</param>
-        /// <param name="cleanLauncherPath">Path to the clean launcher.</param>
         private static void ReplaceLauncher(string gamePath, string cleanLauncherPath)
         {
             string nativeLauncherPath = @$"{gamePath}\SCPSL.exe";
@@ -115,19 +79,15 @@ namespace SCPSL_ModPatch.PatchUtils
             File.Copy(cleanLauncherPath, nativeLauncherPath, true);
         }
 
-        /// <summary>
-        /// Replaces native launcher with the clean one.
-        /// </summary>
-        /// <param name="gamePath">Root game folder.</param>
 #if WINDOWS
-        public void ReplaceLauncher(string gamePath)
+        public bool ReplaceLauncher(string gamePath)
         {
             if (!IsPathValid(_versionRangeInfo.cleanLauncherPath))
             {
                 if (!_interactive)
                     throw new InvalidDataException("Invalid launcher path in the patch info.");
                 MessageBox.Show("Invalid launcher path in the patch info.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
+                return false;
             }
 
             if (!File.Exists(_versionRangeInfo.cleanLauncherPath))
@@ -135,30 +95,26 @@ namespace SCPSL_ModPatch.PatchUtils
                 if (!_interactive)
                     throw new FileNotFoundException("A local clean launcher is required in headless mode.", _versionRangeInfo.cleanLauncherPath);
                 if (string.IsNullOrEmpty(_versionRangeInfo.cleanLauncherUrl))
-                    return;
+                    return false;
 
-                DialogResult launcherDialogResult = MessageBox.Show("The native Unity launcher doesn't exist. " +
-                    "Without it you can't start the game without anti-cheat.\r\n" +
-                    "Would you like to download the launcher from the web?", "Warning", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                DialogResult launcherDialogResult = MessageBox.Show("The matching clean Unity launcher was not found. " +
+                    "GameAssembly.dll has already been patched, but SCPSL.exe still needs to be replaced.\r\n\r\n" +
+                    "Download the clean launcher now?", "Clean launcher required", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
                 if (launcherDialogResult == DialogResult.Yes)
                 {
                     string cleanLauncherUrl = _versionRangeInfo.cleanLauncherUrl;
                     string cleanLauncherPath = _versionRangeInfo.cleanLauncherPath;
                     DownloadLauncher(cleanLauncherUrl, cleanLauncherPath);
                     if (!File.Exists(_versionRangeInfo.cleanLauncherPath))
-                        return;
+                        return false;
                 }
                 else
-                    return;
+                    return false;
             }
             ReplaceLauncher(gamePath, _versionRangeInfo.cleanLauncherPath);
+            return true;
         }
 
-        /// <summary>
-        /// Downloads the clean launcher from the web.
-        /// </summary>
-        /// <param name="cleanLauncherUrl"></param>
-        /// <param name="cleanLauncherPath"></param>
         private static void DownloadLauncher(string cleanLauncherUrl, string cleanLauncherPath)
         {
             cleanLauncherPath = Path.GetFullPath(cleanLauncherPath);
@@ -167,11 +123,6 @@ namespace SCPSL_ModPatch.PatchUtils
         }
 #endif
 
-        /// <summary>
-        /// Checks if the path is valid.
-        /// </summary>
-        /// <param name="path"></param>
-        /// <returns></returns>
         private bool IsPathValid(string path)
         {
             try
@@ -185,11 +136,6 @@ namespace SCPSL_ModPatch.PatchUtils
             return true;
         }
 
-        /// <summary>
-        /// Prepares patch data before patching.
-        /// </summary>
-        /// <param name="patchData">Raw patch data from user.</param>
-        /// <returns>Clean patch data that contains only hex.</returns>
         private string PreparePatchData(string patchData)
         {
             StringBuilder patchDataSB = new StringBuilder(patchData);
@@ -197,7 +143,6 @@ namespace SCPSL_ModPatch.PatchUtils
             patchDataSB.Replace("[NOP]", "90");
             patchDataSB.Replace("[RET]", "C3");
 
-            //FASM
             MatchCollection matches = Regex.Matches(patchDataSB.ToString(), @"\[FASM:(.*?)!\]");
             bool isFasmExisting = FASM.IsFasmExisting(_interactive);
             if (!isFasmExisting && matches.Count > 0)
@@ -220,7 +165,6 @@ namespace SCPSL_ModPatch.PatchUtils
                 }
             }
 
-            // Replacing a possible " " and "-" separators.
             patchDataSB.Replace(" ", string.Empty);
             patchDataSB.Replace("-", string.Empty);
 
@@ -295,9 +239,6 @@ namespace SCPSL_ModPatch.PatchUtils
             plan.Add(patchMethod.name, patchOffset, patchSize, patchData);
         }
 
-        /// <summary>
-        /// Patches GameAssembly.
-        /// </summary>
         public void PatchGameAssembly()
         {
             _patchOutcomes.Clear();
@@ -359,10 +300,6 @@ namespace SCPSL_ModPatch.PatchUtils
             _patchOutcomes.AddRange(outcomes);
         }
 
-        /// <summary>
-        /// Reports a missing patch method.
-        /// </summary>
-        /// <param name="message">Warning message.</param>
         private static void ReportMissingPatch(string message)
         {
 #if WINDOWS
@@ -381,15 +318,13 @@ namespace SCPSL_ModPatch.PatchUtils
             {
                 using SHA256 hash = SHA256.Create();
                 if (!string.Equals(Convert.ToHexString(hash.ComputeHash(file)), _il2cppManager.SavedAssemblySha256, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException("GameAssembly.dll changed on disk after loading. Reload IL2CPP before saving.");
+                    throw new InvalidDataException("GameAssembly.dll changed on disk after loading. Press Load game again before saving.");
                 file.Position = 0;
                 file.Write(_gameAssemblyData);
                 file.SetLength(_gameAssemblyData.Length);
             }
             _il2cppManager.SavedAssemblySha256 = PatchTargetResolver.ComputeSha256(_gameAssemblyData);
         }
-
-        // Game version
 
         /// <summary>
         /// Checks whether the default modern version method is absent.
@@ -504,11 +439,6 @@ namespace SCPSL_ModPatch.PatchUtils
                 .Select(field => metadata.GetStringFromIndex(field.nameIndex)).ToArray();
         }
 
-        /// <summary>
-        /// Gets game version of the game.
-        /// </summary>
-        /// <returns>Game version of the game.</returns>
-        /// <exception cref="GameVersionNotFoundException"></exception>
         public GameVersion GetGameVersion()
         {
             GameVersionMethodInfo? gameVersionMethod = _versionRangeInfo.methods.gameVersionMethod;
@@ -537,10 +467,6 @@ namespace SCPSL_ModPatch.PatchUtils
             return gameVersion;
         }
 
-        /// <summary>
-        /// Changes game version of the game.
-        /// </summary>
-        /// <param name="version">New version of the game.</param>
         public void ChangeGameVersion(GameVersion version)
         {
             if (UsesLegacyVersionReader || !version.type.HasValue)
@@ -559,11 +485,6 @@ namespace SCPSL_ModPatch.PatchUtils
             _gameAssemblyData[gameVersionOffset + gameVersionMethod.typeOffset] = (byte)version.type.Value;
         }
 
-        // Game version auto finder
-
-        /// <summary>
-        /// Automatically finds GameVersion offsets.
-        /// </summary>
         public void AutoFindGameVersionOffsets()
         {
             GameVersionMethodInfo? gameVersionMethod = _versionRangeInfo.methods.gameVersionMethod;
@@ -582,10 +503,6 @@ namespace SCPSL_ModPatch.PatchUtils
             AutoFindGameVersionOffsets(gameVersionOffset);
         }
 
-        /// <summary>
-        /// Automatically finds GameVersion offsets.
-        /// </summary>
-        /// <param name="gameVersionOffset">Offset of the GameVersion method.</param>
         public void AutoFindGameVersionOffsets(int gameVersionOffset)
         {
             GameVersionMethodInfo? gameVersionMethod = _versionRangeInfo.methods.gameVersionMethod;
@@ -613,11 +530,6 @@ namespace SCPSL_ModPatch.PatchUtils
             gameVersionMethod.typeOffset = fieldsValuesOffsets[3] - gameVersionOffset;
         }
 
-        /// <summary>
-        /// Gets pattern offset inside the GameVersion method.
-        /// </summary>
-        /// <param name="gameVersionOffset"></param>
-        /// <returns>Pattern offset.</returns>
         private long GetPatternOffset(int gameVersionOffset)
         {
             byte[] patternInstruction = new byte[] { 0x48, 0x8B, 0x88, 0xB8, 0x00, 0x00, 0x00 }; // mov rcx, [rax+0B8h]
@@ -627,13 +539,6 @@ namespace SCPSL_ModPatch.PatchUtils
             return patternOffset;
         }
 
-        /// <summary>
-        /// Gets version staticField value offset.
-        /// </summary>
-        /// <param name="staticFieldOffset"></param>
-        /// <param name="findOffset"></param>
-        /// <param name="newFindOffset"></param>
-        /// <returns>StaticField value offset.</returns>
         private int GetVersionStaticFieldValueOffset(byte staticFieldOffset, int findOffset, out int newFindOffset)
         {
             byte[] instructionBytes = GetVersionStaticFieldInstructionBytes(staticFieldOffset);
@@ -649,11 +554,6 @@ namespace SCPSL_ModPatch.PatchUtils
             return staticFieldValueOffset;
         }
 
-        /// <summary>
-        /// Gets version staticField instruction pattern for searching.
-        /// </summary>
-        /// <param name="staticFieldOffset"></param>
-        /// <returns>Pattern of the instruction.</returns>
         private static byte[] GetVersionStaticFieldInstructionBytes(byte staticFieldOffset)
         {
             switch (staticFieldOffset)
