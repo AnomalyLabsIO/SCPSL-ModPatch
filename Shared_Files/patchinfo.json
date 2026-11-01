@@ -47,7 +47,7 @@
       "versionFrom": "10.1.0",
       "versionTo": "11.1.4",
       "cleanLauncherPath": "./clean_launchers/2019.4.16f1/SCPSL.exe",
-      "cleanLauncherUrl": "https://raw.githubusercontent.com/hopperlopip/SCPSL-ModPatch/refs/heads/master/Shared_Files/clean_launchers/2019.4.16f1/SCPSL.exe",
+      "cleanLauncherUrl": "https://raw.githubusercontent.com/AnomalyLabsIO/SCPSL-ModPatch/refs/heads/master/Shared_Files/clean_launchers/2019.4.16f1/SCPSL.exe",
       "metadataVersion": 24,
       "methods": {
         "patchMethods": [
@@ -72,7 +72,7 @@
       "versionFrom": "11.1.5",
       "versionTo": "12.0.2",
       "cleanLauncherPath": "./clean_launchers/2019.4.16f1/SCPSL.exe",
-      "cleanLauncherUrl": "https://raw.githubusercontent.com/hopperlopip/SCPSL-ModPatch/refs/heads/master/Shared_Files/clean_launchers/2019.4.16f1/SCPSL.exe",
+      "cleanLauncherUrl": "https://raw.githubusercontent.com/AnomalyLabsIO/SCPSL-ModPatch/refs/heads/master/Shared_Files/clean_launchers/2019.4.16f1/SCPSL.exe",
       "metadataVersion": 24,
       "methods": {
         "patchMethods": [
@@ -114,7 +114,7 @@
       "versionRange": "11.2.0 (early build)",
       "gameAssemblySha256": "FC662B3B2B5D88FBECE05AAE6B5D4E772D9EC5ECAC85196B9977E64044A36BA6",
       "cleanLauncherPath": "./clean_launchers/2019.4.16f1/SCPSL.exe",
-      "cleanLauncherUrl": "https://raw.githubusercontent.com/hopperlopip/SCPSL-ModPatch/refs/heads/master/Shared_Files/clean_launchers/2019.4.16f1/SCPSL.exe",
+      "cleanLauncherUrl": "https://raw.githubusercontent.com/AnomalyLabsIO/SCPSL-ModPatch/refs/heads/master/Shared_Files/clean_launchers/2019.4.16f1/SCPSL.exe",
       "metadataVersion": 24,
       "methods": {
         "patchMethods": [
@@ -139,7 +139,7 @@
       "versionFrom": "13.0.0",
       "versionTo": "13.5.1",
       "cleanLauncherPath": "./clean_launchers/2021.3.17f1/SCPSL.exe",
-      "cleanLauncherUrl": "https://raw.githubusercontent.com/hopperlopip/SCPSL-ModPatch/refs/heads/master/Shared_Files/clean_launchers/2021.3.17f1/SCPSL.exe",
+      "cleanLauncherUrl": "https://raw.githubusercontent.com/AnomalyLabsIO/SCPSL-ModPatch/refs/heads/master/Shared_Files/clean_launchers/2021.3.17f1/SCPSL.exe",
       "metadataVersion": 29,
       "methods": {
         "patchMethods": [
@@ -189,7 +189,7 @@
       "versionRange": "13.6.9",
       "version": "13.6.9",
       "cleanLauncherPath": "./clean_launchers/2021.3.17f1/SCPSL.exe",
-      "cleanLauncherUrl": "https://raw.githubusercontent.com/hopperlopip/SCPSL-ModPatch/refs/heads/master/Shared_Files/clean_launchers/2021.3.17f1/SCPSL.exe",
+      "cleanLauncherUrl": "https://raw.githubusercontent.com/AnomalyLabsIO/SCPSL-ModPatch/refs/heads/master/Shared_Files/clean_launchers/2021.3.17f1/SCPSL.exe",
       "metadataVersion": 29,
       "methods": {
         "patchMethods": [
@@ -240,7 +240,7 @@
       "versionFrom": "14.0.0",
       "versionTo": "14.0.3",
       "cleanLauncherPath": "./clean_launchers/2021.3.17f1/SCPSL.exe",
-      "cleanLauncherUrl": "https://raw.githubusercontent.com/hopperlopip/SCPSL-ModPatch/refs/heads/master/Shared_Files/clean_launchers/2021.3.17f1/SCPSL.exe",
+      "cleanLauncherUrl": "https://raw.githubusercontent.com/AnomalyLabsIO/SCPSL-ModPatch/refs/heads/master/Shared_Files/clean_launchers/2021.3.17f1/SCPSL.exe",
       "metadataVersion": 29,
       "methods": {
         "patchMethods": [
@@ -284,7 +284,7 @@
       "versionFrom": "14.1.0",
       "versionTo": "14.1.2",
       "cleanLauncherPath": "./clean_launchers/6000.0.43f1/SCPSL.exe",
-      "cleanLauncherUrl": "https://raw.githubusercontent.com/hopperlopip/SCPSL-ModPatch/refs/heads/master/Shared_Files/clean_launchers/6000.0.43f1/SCPSL.exe",
+      "cleanLauncherUrl": "https://raw.githubusercontent.com/AnomalyLabsIO/SCPSL-ModPatch/refs/heads/master/Shared_Files/clean_launchers/6000.0.43f1/SCPSL.exe",
       "metadataVersion": 31,
       "methods": {
         "patchMethods": [
@@ -328,7 +328,7 @@
       "versionFrom": "14.1.3",
       "versionTo": "Current",
       "cleanLauncherPath": "./clean_launchers/6000.0.43f1/SCPSL.exe",
-      "cleanLauncherUrl": "https://raw.githubusercontent.com/hopperlopip/SCPSL-ModPatch/refs/heads/master/Shared_Files/clean_launchers/6000.0.43f1/SCPSL.exe",
+      "cleanLauncherUrl": "https://raw.githubusercontent.com/AnomalyLabsIO/SCPSL-ModPatch/refs/heads/master/Shared_Files/clean_launchers/6000.0.43f1/SCPSL.exe",
       "metadataVersion": 31,
       "methods": {
         "patchMethods": [
